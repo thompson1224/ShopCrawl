@@ -6,6 +6,7 @@ import requests
 from bs4 import BeautifulSoup
 import uvicorn
 import asyncio
+import os
 
 app = FastAPI()
 
@@ -18,9 +19,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# index.html 파일을 정적 파일로 서빙합니다.
+# 현재 파일의 디렉토리를 기준으로 정적 파일을 서빙합니다.
 # 이 코드를 추가함으로써 백엔드 서버가 프론트엔드 파일을 직접 제공하게 됩니다.
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+current_dir = os.path.dirname(os.path.abspath(__file__))
+app.mount("/", StaticFiles(directory=current_dir, html=True), name="static")
 
 @app.get("/")
 def read_root():
@@ -74,5 +76,5 @@ async def hotdeals():
 
 if __name__ == '__main__':
     # Uvicorn을 사용하여 FastAPI 서버를 실행합니다.
-    # 배포 환경을 고려하여 호스트를 '0.0.0.0'로 변경합니다.
-    uvicorn.run(app, host="0.0.0.0", port=5000)
+    # 로컬 개발 환경을 위해 reload=True를 추가합니다.
+    uvicorn.run(app, host="0.0.0.0", port=5000, reload=True)
