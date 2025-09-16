@@ -22,7 +22,10 @@ app.add_middleware(
 # 현재 파일의 디렉토리를 기준으로 정적 파일을 서빙합니다.
 # 이 코드를 추가함으로써 백엔드 서버가 프론트엔드 파일을 직접 제공하게 됩니다.
 current_dir = os.path.dirname(os.path.abspath(__file__))
-app.mount("/", StaticFiles(directory=current_dir, html=True), name="static")
+templates_dir = os.path.join(current_dir, "templates")
+
+# FastAPI가 templates 폴더의 정적 파일을 제공하도록 설정
+app.mount("/", StaticFiles(directory=templates_dir, html=True), name="static")
 
 @app.get("/")
 def read_root():
