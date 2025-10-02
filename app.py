@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import RedirectResponse
+from starlette.responses import FileResponse  # RedirectResponse 대신 FileResponse 사용
 import requests
 from bs4 import BeautifulSoup
 import uvicorn
@@ -10,7 +10,7 @@ import os
 
 app = FastAPI()
 
-# 모든 도메인에서의 API 요청을 허용합니다. (개발용)
+# CORS 미들웨어 설정 (기존과 동일)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,23 +19,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 현재 파일의 디렉토리를 기준으로 정적 파일을 서빙합니다.
-# 이 코드를 추가함으로써 백엔드 서버가 프론트엔드 파일을 직접 제공하게 됩니다.
-current_dir = os.path.dirname(os.path.abspath(__file__))
-templates_dir = os.path.join(current_dir, "templates")
+# --- 순서 변경 ---
+# 1. API 라우트를 먼저 정의합니다.
+@app.get('/api/hotdeals')
+async def hotdeals():
+    """
+    크롤링된 핫딜 목록을 JSON 형태로 반환하는 API 엔드포인트입니다.
+    """
+    deals = await get_hot_deals()
+    return deals
 
-# FastAPI가 templates 폴더의 정적 파일을 제공하도록 설정
-app.mount("/", StaticFiles(directory=templates_dir, html=True), name="static")
-
-@app.get("/")
-def read_root():
-    # 루트 URL로 접속하면 index.html로 리디렉션합니다.
-    return RedirectResponse(url="/index.html")
-
+# (get_hot_deals 함수는 여기에 그대로 둡니다)
 async def get_hot_deals():
-    """
-    뽐뿌 핫딜 게시판에서 핫딜 정보를 비동기적으로 크롤링합니다.
-    """
+    # ... (기존 코드와 동일)
     url = 'https://www.ppomppu.co.kr/zboard/zboard.php?id=ppomppu'
     try:
         response = await asyncio.to_thread(requests.get, url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -47,37 +43,50 @@ async def get_hot_deals():
     soup = BeautifulSoup(response.text, 'html.parser')
     deal_list = []
     
-    for item in soup.select('div.list_tr'):
+    # 뽐뿌의 새로운 구조에 맞춰 선택자를 수정합니다. 
+    # 'div.list_tr' 대신 'tr.list_vspace'를 사용하고, 제목과 링크 선택자도 수정합니다.
+    base_url = "https://www.ppomppu.co.kr/zboard/"
+    for item in soup.find_all('tr', class_='list_vspace'):
         try:
-            title_tag = item.select_one('a.subject')
-            link_tag = item.select_one('a.subject')
+            # 제목과 링크가 포함된 a 태그를 찾습니다.
+            title_tag = item.find('a', href=lambda href: href and "view.php" in href)
             
-            if title_tag and link_tag:
-                title = title_tag.text.strip()
-                link = 'https://www.ppomppu.co.kr/zboard/' + link_tag['href']
-                deal_list.append({'title': title, 'link': link})
+            if title_tag:
+                title = title_tag.get_text(strip=True)
+                link = base_url + title_tag['href']
+                
+                # 불필요한 이미지 태그 등 제거
+                for img in title_tag.find_all('img'):
+                    img.decompose()
+                title = title_tag.get_text(strip=True)
+
+                if title: # 제목이 비어있지 않은 경우에만 추가
+                    deal_list.append({'title': title, 'link': link})
+
         except (AttributeError, KeyError) as e:
             print(f"핫딜 항목을 파싱하는 중 오류 발생: {e}")
             continue
-    
+
     if not deal_list:
-        deal_list = [
-            {"title": "삼성전자 8K QLED TV 65인치 (최저가) + 백화점상품권", "link": "#"},
-            {"title": "애플 아이폰 15 Pro 자급제 (쿠팡)", "link": "#"},
-            {"title": "닌텐도 스위치 OLED 스플래툰3 에디션", "link": "#"}
+        print("크롤링된 핫딜이 없습니다. 임시 데이터를 반환합니다.")
+        return [
+            {"title": "크롤링 실패! 임시 데이터: 삼성 TV", "link": "#"},
+            {"title": "크롤링 실패! 임시 데이터: 아이폰 15 Pro", "link": "#"},
         ]
         
     return deal_list
 
-@app.get('/api/hotdeals')
-async def hotdeals():
-    """
-    크롤링된 핫딜 목록을 JSON 형태로 반환하는 API 엔드포인트입니다.
-    """
-    deals = await get_hot_deals()
-    return deals
+# 2. 정적 파일 마운트를 나중에 설정합니다.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+templates_dir = os.path.join(current_dir, "templates")
+app.mount("/", StaticFiles(directory=templates_dir, html=True), name="static")
+
+# 루트 경로 핸들러는 StaticFiles가 처리하므로 불필요할 수 있습니다.
+# 만약 특정 동작이 필요하다면 유지할 수 있지만, 지금 구조에서는 StaticFiles가
+# 자동으로 index.html을 찾아주므로 아래 코드는 제거해도 괜찮습니다.
+# @app.get("/")
+# def read_root():
+#     return FileResponse(os.path.join(templates_dir, "index.html"))
 
 if __name__ == '__main__':
-    # Uvicorn을 사용하여 FastAPI 서버를 실행합니다.
-    # 로컬 개발 환경을 위해 reload=True를 추가합니다.
     uvicorn.run(app, host="0.0.0.0", port=5000, reload=True)
