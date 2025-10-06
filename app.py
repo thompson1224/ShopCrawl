@@ -26,15 +26,16 @@ async def scrape_zod():
     deal_list = []
     browser = None
     try:
-        print("Zod 크롤러 시작...")
         async with async_playwright() as p:
-            # headless 브라우저 감지 우회
             browser = await p.chromium.launch(
                 headless=True,
                 args=[
                     '--disable-blink-features=AutomationControlled',
                     '--no-sandbox',
-                    '--disable-dev-shm-usage'
+                    '--disable-dev-shm-usage',
+                    '--disable-gpu',
+                    '--disable-software-rasterizer',
+                    '--disable-extensions'
                 ]
             )
             
@@ -45,43 +46,36 @@ async def scrape_zod():
             
             page = await context.new_page()
             
-            # JavaScript로 webdriver 감지 우회
+            # 불필요한 리소스 차단
+            await page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "stylesheet", "font", "media"] else route.continue_())
+            
             await page.add_init_script("""
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
             """)
             
-            print("Zod.kr 접속 중...")
-            await page.goto('https://zod.kr/deal', wait_until='load', timeout=20000)
+            await page.goto('https://zod.kr/deal', wait_until='domcontentloaded', timeout=15000)
             
-            # 충분한 대기 시간
-            print("페이지 렌더링 대기 중...")
-            await page.wait_for_timeout(5000)
+            # 대기 시간 단축: 5초 → 2초
+            await page.wait_for_timeout(2000)
             
-            # selector 대기 (state를 attached로 변경)
             try:
-                await page.wait_for_selector('ul.app-board-template-list', state='attached', timeout=10000)
+                await page.wait_for_selector('ul.app-board-template-list', state='attached', timeout=8000)
             except:
-                print("게시판 리스트를 찾을 수 없음, 대체 selector 시도")
-                await page.wait_for_timeout(2000)
+                await page.wait_for_timeout(1000)
             
             posts = await page.query_selector_all('ul.app-board-template-list li')
             
             if not posts:
-                # 대체 selector 시도
                 posts = await page.query_selector_all('li[class*="app-list"]')
-            
-            print(f"Zod 게시글 {len(posts)}개 발견")
             
             for item in posts:
                 try:
-                    # 전체 텍스트 확인 (공지사항 필터링)
                     text_content = await item.inner_text()
                     if not text_content or '공지' in text_content[:10]:
                         continue
                     
-                    # 링크
                     link_tag = await item.query_selector('a[href*="/deal/"]')
                     if not link_tag:
                         link_tag = await item.query_selector('a')
@@ -94,7 +88,6 @@ async def scrape_zod():
                     
                     link = 'https://zod.kr' + href if href.startswith('/') else href
                     
-                    # 썸네일
                     thumbnail = ""
                     img = await item.query_selector('img')
                     if img:
@@ -105,7 +98,6 @@ async def scrape_zod():
                             elif thumbnail_src.startswith('http'):
                                 thumbnail = thumbnail_src
                     
-                    # 제목
                     title = "제목 없음"
                     title_span = await item.query_selector('span.app-list-title-item')
                     if title_span:
@@ -118,7 +110,6 @@ async def scrape_zod():
                                 title = line.strip()
                                 break
                     
-                    # 가격
                     price = "가격 정보 없음"
                     strong_tags = await item.query_selector_all('strong')
                     for strong in strong_tags:
@@ -128,7 +119,6 @@ async def scrape_zod():
                             price = strong_text
                             break
                     
-                    # 작성자
                     author = "작성자"
                     member_div = await item.query_selector('div.app-list-member')
                     if member_div:
@@ -146,22 +136,18 @@ async def scrape_zod():
                         'link': link
                     })
                     
-                except Exception as e:
-                    print(f"Zod 항목 파싱 오류: {e}")
+                except Exception:
                     continue
             
-            print(f"Zod 크롤링 완료: {len(deal_list)}개 항목")
             await browser.close()
-            browser = None
             
     except Exception as e:
-        print(f"Zod Playwright 크롤링 중 오류 발생: {e}")
+        print(f"Zod 크롤링 오류: {e}")
         if browser:
             await browser.close()
         return []
     
     return deal_list
-
 
 
 
@@ -204,25 +190,38 @@ async def scrape_ruliweb():
     deal_list = []
     browser = None
     try:
-        print("루리웹 크롤러 시작...")
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            # 성능 최적화 옵션 추가
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    '--disable-dev-shm-usage',
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-gpu',
+                    '--disable-software-rasterizer',
+                    '--disable-extensions'
+                ]
+            )
+            
             page = await browser.new_page()
-            await page.goto('https://bbs.ruliweb.com/market/board/1020', timeout=20000)
+            
+            # 불필요한 리소스 차단 (이미지, 폰트, CSS 로딩 건너뛰기)
+            await page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "stylesheet", "font"] else route.continue_())
+            
+            await page.goto('https://bbs.ruliweb.com/market/board/1020', wait_until='domcontentloaded', timeout=15000)
             
             list_selector = 'table.board_list_table tbody tr.table_body'
-            await page.wait_for_selector(list_selector, timeout=15000)
+            await page.wait_for_selector(list_selector, timeout=10000)
             
             posts = await page.query_selector_all(list_selector)
 
             for item in posts:
                 try:
-                    # 공지사항 건너뛰기
                     is_notice = await item.evaluate('(element) => element.classList.contains("notice")')
                     if is_notice:
                         continue
 
-                    # 제목 및 링크
                     title_tag = await item.query_selector('a.deco')
                     if not title_tag:
                         continue
@@ -233,18 +232,12 @@ async def scrape_ruliweb():
                     if link and link.startswith('/'):
                         link = 'https://bbs.ruliweb.com' + link
                     
-                    # 작성자
                     author_tag = await item.query_selector('td.writer a')
-                    author = (await author_tag.inner_text()).strip() if author_tag else "작성자 정보 없음"
+                    author = (await author_tag.inner_text()).strip() if author_tag else "작성자"
 
-                    # 썸네일 (목록에는 없음, 빈 문자열 반환)
                     thumbnail = ""
-
-                    # 가격 추출
                     price_match = re.search(r'(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)', full_title)
                     price = price_match.group(1) if price_match else "가격 정보 없음"
-                    
-                    # 제목 정리
                     clean_title = re.sub(r'\[.*?\]|\s*\(\d+\)$|\s*\(?(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)\)?', '', full_title).strip()
                     
                     deal_list.append({
@@ -257,22 +250,18 @@ async def scrape_ruliweb():
                         'link': link
                     })
                     
-                except Exception as e:
-                    print(f"루리웹 항목 파싱 오류: {e}")
+                except Exception:
                     continue
             
-            print(f"루리웹 게시물 {len(deal_list)}개 처리 완료.")
             await browser.close()
-            browser = None
             
     except Exception as e:
-        print(f"루리웹 Playwright 크롤링 중 오류 발생: {e}")
+        print(f"루리웹 크롤링 오류: {e}")
         if browser:
             await browser.close()
         return []
     
     return deal_list
-
 
 
 # --- API 엔드포인트 (Zod 제외) ---
