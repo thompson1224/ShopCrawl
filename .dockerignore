@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.DS_Store
+*.log
+zod_debug.png
+node_modules/
+.env
