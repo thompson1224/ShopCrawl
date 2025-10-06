@@ -30,13 +30,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 dealWrapper.className = 'flex items-start space-x-4';
 
                 const thumbnail = document.createElement('img');
-                if (deal.thumbnail) {
+
+                if (deal.thumbnail && deal.thumbnail.trim() !== '') {
                     thumbnail.src = `/image-proxy?url=${encodeURIComponent(deal.thumbnail)}&source=${deal.source}`;
                 } else {
-                    thumbnail.src = 'https://placehold.co/80x80?text=No+Img';
+                    thumbnail.src = 'https://via.placeholder.com/80x80/e5e7eb/9ca3af?text=No+Image';
                 }
+
                 thumbnail.alt = deal.title;
                 thumbnail.className = 'w-20 h-20 object-cover rounded-md border border-gray-200 flex-shrink-0';
+
                 
                 const contentWrapper = document.createElement('div');
                 contentWrapper.className = 'flex-grow flex flex-col justify-between h-20';
