@@ -9,9 +9,19 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f3f4f6; }
-        .source-btn.active { background-color: #3b82f6; color: white; border-color: #3b82f6; }
-        .deal-item-container:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); }
+        body { 
+            font-family: 'Noto Sans KR', sans-serif; 
+            background-color: #f3f4f6; 
+        }
+        .source-btn.active { 
+            background-color: #3b82f6; 
+            color: white; 
+            border-color: #3b82f6; 
+        }
+        .deal-item-container:hover { 
+            transform: translateY(-4px); 
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); 
+        }
     </style>
 </head>
 <body class="bg-gray-100 p-6 flex flex-col items-center min-h-screen">
@@ -20,9 +30,10 @@
         
         <div id="source-buttons" class="flex justify-center space-x-2 mb-8">
             <button data-source="all" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200 active">전체보기</button>
-            <button data-source="ppomppu" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">뽐뿌</button>
-            <button data-source="ruliweb" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">루리웹</button>
-            <button data-source="zod" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">Zod</button>
+            <button data-source="뽐뿌" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">뽐뿌</button>
+            <button data-source="루리웹" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">루리웹</button>
+            <button data-source="Zod" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">Zod</button>
+            <button data-source="어미새" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">어미새</button>
         </div>
         
         <div id="hotdeal-list" class="space-y-4">
@@ -30,6 +41,8 @@
                 <span class="animate-pulse">핫딜 정보를 불러오는 중...</span>
             </div>
         </div>
+        
+        <div id="pagination" class="mt-6"></div>
     </div>
 
     <script src="/main.js" defer></script>
