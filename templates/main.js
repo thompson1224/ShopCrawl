@@ -47,44 +47,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 const linkContainer = document.createElement('a');
                 linkContainer.href = deal.link;
                 linkContainer.target = '_blank';
-                linkContainer.className = 'block bg-white p-4 rounded-lg shadow transition-all duration-300 deal-item-container';
+                linkContainer.className = 'block glass-morphism p-5 rounded-2xl shadow-lg deal-item-container';
             
                 const dealWrapper = document.createElement('div');
                 dealWrapper.className = 'flex items-start space-x-4';
             
-                // 썸네일 처리
+                // 썸네일
                 let thumbnailElement;
                 if (deal.thumbnail && deal.thumbnail.trim() !== '') {
                     thumbnailElement = document.createElement('img');
                     thumbnailElement.src = `/image-proxy?url=${encodeURIComponent(deal.thumbnail)}&source=${encodeURIComponent(deal.source)}`;
                     thumbnailElement.alt = deal.title;
-                    thumbnailElement.className = 'w-20 h-20 object-cover rounded-md border border-gray-200 flex-shrink-0';
+                    thumbnailElement.className = 'w-24 h-24 object-cover rounded-xl border-2 border-gray-100 flex-shrink-0 shadow-md';
                     
-                    // 에러 처리
                     thumbnailElement.onerror = function() {
                         const placeholder = document.createElement('div');
-                        placeholder.className = 'w-20 h-20 bg-gray-200 rounded-md flex items-center justify-center text-gray-400 flex-shrink-0';
-                        placeholder.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>';
+                        placeholder.className = 'w-24 h-24 bg-gradient-to-br from-purple-100 to-blue-100 rounded-xl flex items-center justify-center text-gray-400 flex-shrink-0 shadow-md';
+                        placeholder.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>';
                         this.parentElement.replaceChild(placeholder, this);
                     };
                 } else {
-                    // 썸네일 없을 때
                     thumbnailElement = document.createElement('div');
-                    thumbnailElement.className = 'w-20 h-20 bg-gray-200 rounded-md flex items-center justify-center text-gray-400 flex-shrink-0';
-                    thumbnailElement.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>';
+                    thumbnailElement.className = 'w-24 h-24 bg-gradient-to-br from-purple-100 to-blue-100 rounded-xl flex items-center justify-center text-gray-400 flex-shrink-0 shadow-md';
+                    thumbnailElement.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>';
                 }
             
                 const contentWrapper = document.createElement('div');
-                contentWrapper.className = 'flex-grow flex flex-col justify-between h-20';
+                contentWrapper.className = 'flex-grow min-w-0';
             
                 const topMeta = document.createElement('div');
-                topMeta.className = 'flex items-center space-x-2 text-xs text-gray-500';
+                topMeta.className = 'flex items-center space-x-2 text-xs mb-2';
             
                 const sourceTag = document.createElement('span');
-                sourceTag.className = 'font-bold px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full';
+                sourceTag.className = 'font-bold px-3 py-1 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full shadow-sm';
                 sourceTag.textContent = deal.source;
             
                 const authorTag = document.createElement('span');
+                authorTag.className = 'text-gray-500';
                 authorTag.textContent = `by ${deal.author}`;
                 
                 const timeTag = document.createElement('span');
@@ -96,22 +95,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 topMeta.appendChild(timeTag);
             
                 const title = document.createElement('h2');
-                title.className = 'text-base font-bold text-gray-800 leading-tight my-1';
+                title.className = 'text-lg font-bold text-gray-800 leading-tight mb-2 line-clamp-2';
                 title.textContent = deal.title;
                 
                 const bottomMeta = document.createElement('div');
                 bottomMeta.className = 'flex items-baseline space-x-2';
                 
                 const price = document.createElement('span');
-                price.className = 'text-lg font-bold text-red-500';
+                price.className = 'text-xl font-bold bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent';
                 price.textContent = deal.price || '가격 정보 없음';
             
                 const shipping = document.createElement('span');
-                shipping.className = 'text-sm text-gray-600';
+                shipping.className = 'text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded-lg';
                 shipping.textContent = deal.shipping || '';
             
                 bottomMeta.appendChild(price);
-                bottomMeta.appendChild(shipping);
+                if (deal.shipping) {
+                    bottomMeta.appendChild(shipping);
+                }
             
                 contentWrapper.appendChild(topMeta);
                 contentWrapper.appendChild(title);
@@ -121,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dealWrapper.appendChild(contentWrapper);
                 linkContainer.appendChild(dealWrapper);
                 hotdealList.appendChild(linkContainer);
-            });
+            });            
             
             
             renderPagination(pagination);

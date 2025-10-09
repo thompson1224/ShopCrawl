@@ -5,6 +5,10 @@ from starlette.responses import FileResponse, Response
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from sqlalchemy import desc
+from fastapi import FastAPI, Request, Depends, HTTPException
+from sqlalchemy.orm import Session
+from auth import create_access_token, get_current_user, get_current_user_required, get_db
+from models import User
 
 import uvicorn
 import asyncio
@@ -18,6 +22,26 @@ from models import HotDeal, SessionLocal
 from datetime import datetime, timedelta
 import logging
 import pytz
+
+# 환경변수 로드 (선택)
+from dotenv import load_dotenv
+load_dotenv()
+
+# 디버깅: 환경변수 확인
+print("=" * 50)
+print("🔍 환경변수 로드 확인:")
+print(f"SECRET_KEY: {os.getenv('SECRET_KEY', 'NOT_FOUND')[:20]}...")
+print(f"NAVER_CLIENT_ID: {os.getenv('NAVER_CLIENT_ID', 'NOT_FOUND')}")
+print(f"NAVER_CLIENT_SECRET: {os.getenv('NAVER_CLIENT_SECRET', 'NOT_FOUND')[:10]}...")
+print("=" * 50)
+
+# 네이버 설정
+NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+NAVER_CALLBACK_URL = "http://localhost:8000/api/auth/naver/callback"
+
+if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
+    print("⚠️ 경고: 네이버 로그인 키가 설정되지 않았습니다!")
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -531,6 +555,135 @@ async def image_proxy(url: str, source: str = "뽐뿌"):
         except Exception as e:
             logger.error(f"이미지 프록시 오류: {e}")
             return Response(status_code=404)
+        
+# 네이버 로그인 시작
+@app.get('/api/auth/naver/login')
+async def naver_login():
+    """네이버 로그인 페이지로 리다이렉트"""
+    import secrets
+    state = secrets.token_urlsafe(16)
+    
+    naver_auth_url = (
+        f"https://nid.naver.com/oauth2.0/authorize"
+        f"?response_type=code"
+        f"&client_id={NAVER_CLIENT_ID}"
+        f"&redirect_uri={NAVER_CALLBACK_URL}"
+        f"&state={state}"
+    )
+    
+    return {"url": naver_auth_url}
+
+# 네이버 로그인 콜백
+@app.get('/api/auth/naver/callback')
+async def naver_callback(code: str, state: str, db: Session = Depends(get_db)):
+    """네이버 로그인 콜백 처리"""
+    
+    # 1. 액세스 토큰 발급
+    token_url = "https://nid.naver.com/oauth2.0/token"
+    token_params = {
+        "grant_type": "authorization_code",
+        "client_id": NAVER_CLIENT_ID,
+        "client_secret": NAVER_CLIENT_SECRET,
+        "code": code,
+        "state": state
+    }
+    
+    async with httpx.AsyncClient() as client:
+        token_response = await client.post(token_url, params=token_params, timeout=10.0)
+        token_data = token_response.json()
+        
+        if "access_token" not in token_data:
+            raise HTTPException(status_code=400, detail="네이버 로그인 실패")
+        
+        access_token = token_data["access_token"]
+        
+        # 2. 사용자 정보 가져오기
+        user_info_url = "https://openapi.naver.com/v1/nid/me"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        
+        user_response = await client.get(user_info_url, headers=headers, timeout=10.0)
+        user_data = user_response.json()
+        
+        if user_data.get("resultcode") != "00":
+            raise HTTPException(status_code=400, detail="사용자 정보 가져오기 실패")
+        
+        naver_user = user_data["response"]
+        provider_id = naver_user["id"]
+        email = naver_user.get("email", "")
+        name = naver_user.get("name", "")
+        profile_image = naver_user.get("profile_image", "")
+        
+        # 3. DB에서 사용자 찾기 또는 생성
+        user = db.query(User).filter(
+            User.provider == "naver",
+            User.provider_id == provider_id
+        ).first()
+        
+        if not user:
+            # 신규 사용자 생성
+            user = User(
+                username=f"naver_{provider_id[:10]}",
+                email=email,
+                provider="naver",
+                provider_id=provider_id,
+                profile_image=profile_image,
+                hashed_password=""
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        
+        # 4. JWT 토큰 생성
+        jwt_token = create_access_token(data={"sub": user.id})
+        
+        # 5. 프론트엔드로 리다이렉트 (토큰 전달)
+        frontend_url = f"http://localhost:8000/?token={jwt_token}"
+        
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=frontend_url)
+
+# 현재 유저 정보 조회
+@app.get('/api/auth/me')
+async def get_me(current_user: User = Depends(get_current_user_required)):
+    """현재 로그인한 유저 정보"""
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "provider": current_user.provider,
+        "profile_image": current_user.profile_image,
+        "created_at": current_user.created_at.strftime('%Y-%m-%d')
+    }
+
+@app.get('/api/auth/naver/callback')
+async def naver_callback(code: str, state: str, db: Session = Depends(get_db)):
+    """네이버 로그인 콜백 처리"""
+    
+    print(f"🔵 네이버 콜백 시작: code={code[:10]}...")
+    
+    # ... (토큰 발급 코드)
+    
+    print(f"✅ 네이버 액세스 토큰: {access_token[:20]}...")
+    
+    # ... (사용자 정보 가져오기)
+    
+    print(f"✅ 네이버 사용자 정보: {naver_user}")
+    
+    # ... (DB 저장)
+    
+    print(f"✅ 유저 생성/조회 완료: {user.username}")
+    
+    # JWT 토큰 생성
+    jwt_token = create_access_token(data={"sub": user.id})
+    print(f"✅ JWT 토큰 생성: {jwt_token[:30]}...")
+    
+    # 프론트엔드로 리다이렉트
+    frontend_url = f"http://localhost:8000/?token={jwt_token}"
+    
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=frontend_url)
+
+
 
 # 정적 파일 제공
 current_dir = os.path.dirname(os.path.abspath(__file__))

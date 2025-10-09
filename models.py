@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -7,6 +7,22 @@ import os
 
 Base = declarative_base()
 KST = pytz.timezone('Asia/Seoul')
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, index=True)
+    hashed_password = Column(String, default="")  # 소셜 로그인은 빈값
+    
+    # 소셜 로그인 필드 추가
+    provider = Column(String, default="local", index=True)  # "local", "naver", "kakao"
+    provider_id = Column(String, index=True)  # 네이버 고유 ID
+    profile_image = Column(String)  # 프로필 이미지 URL
+    
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(KST).replace(tzinfo=None))
 
 class HotDeal(Base):
     __tablename__ = "hotdeals"

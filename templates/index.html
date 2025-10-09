@@ -7,43 +7,208 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body { 
             font-family: 'Noto Sans KR', sans-serif; 
-            background-color: #f3f4f6; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
         }
         .source-btn.active { 
-            background-color: #3b82f6; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white; 
-            border-color: #3b82f6; 
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        .deal-item-container {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .deal-item-container:hover { 
-            transform: translateY(-4px); 
-            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1); 
+            transform: translateY(-8px); 
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+        .profile-dropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            padding: 0.5rem;
+            min-width: 200px;
+            z-index: 50;
+        }
+        .profile-container:hover .profile-dropdown {
+            display: block;
+        }
+        .naver-login-btn {
+            background: #03C75A;
+            transition: all 0.3s;
+        }
+        .naver-login-btn:hover {
+            background: #02B350;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(3, 199, 90, 0.3);
+        }
+        .glass-morphism {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
         }
     </style>
 </head>
-<body class="bg-gray-100 p-6 flex flex-col items-center min-h-screen">
-    <div class="container mx-auto max-w-2xl w-full mt-10">
-        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">핫딜 정보 포털</h1>
-        
-        <div id="source-buttons" class="flex justify-center space-x-2 mb-8">
-            <button data-source="all" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200 active">전체보기</button>
-            <button data-source="뽐뿌" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">뽐뿌</button>
-            <button data-source="루리웹" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">루리웹</button>
-            <button data-source="Zod" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">Zod</button>
-            <button data-source="어미새" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-full shadow-sm font-semibold transition-colors duration-200 border border-gray-200">어미새</button>
+<body class="p-6">
+    <div class="container mx-auto max-w-4xl">
+        <!-- 헤더 -->
+        <div class="glass-morphism rounded-2xl p-6 mb-8 shadow-2xl">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent">
+                        🔥 핫딜모아
+                    </h1>
+                    <p class="text-sm text-gray-500 mt-1">실시간 최저가 핫딜 정보</p>
+                </div>
+                
+                <div id="auth-section">
+                    <!-- 로그인 전 -->
+                    <button id="loginBtn" onclick="naverLogin()" class="naver-login-btn px-6 py-3 text-white font-semibold rounded-xl shadow-lg flex items-center space-x-2">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M16.273 12.845L7.376 0H0v24h7.726V11.156L16.624 24H24V0h-7.727v12.845z"/>
+                        </svg>
+                        <span>네이버 로그인</span>
+                    </button>
+                    
+                    <!-- 로그인 후 -->
+                    <div id="userInfo" class="hidden profile-container relative">
+                        <div class="flex items-center space-x-3 bg-white rounded-xl px-4 py-2 shadow-md cursor-pointer hover:shadow-lg transition-all">
+                            <div class="relative">
+                                <img id="profileImg" src="" class="w-10 h-10 rounded-full border-2 border-purple-500 hidden">
+                                <div id="profileInitial" class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg"></div>
+                            </div>
+                            <div class="flex flex-col">
+                                <span id="username" class="font-semibold text-gray-800 text-sm"></span>
+                                <span class="text-xs text-gray-500">네이버 회원</span>
+                            </div>
+                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                            </svg>
+                        </div>
+                        
+                        <!-- 드롭다운 메뉴 -->
+                        <div class="profile-dropdown">
+                            <div class="px-3 py-2 border-b border-gray-100">
+                                <p class="text-xs text-gray-500">로그인됨</p>
+                                <p id="userEmail" class="text-sm font-medium text-gray-800"></p>
+                            </div>
+                            <button onclick="logout()" class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg mt-1 transition-colors">
+                                🚪 로그아웃
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 소스 필터 -->
+        <div id="source-buttons" class="flex justify-center flex-wrap gap-3 mb-8">
+            <button data-source="all" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 active">
+                🔥 전체보기
+            </button>
+            <button data-source="뽐뿌" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200">
+                💰 뽐뿌
+            </button>
+            <button data-source="루리웹" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200">
+                🎮 루리웹
+            </button>
+            <button data-source="Zod" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200">
+                🛒 Zod
+            </button>
+            <button data-source="어미새" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200">
+                🐦 어미새
+            </button>
         </div>
         
+        <!-- 핫딜 리스트 -->
         <div id="hotdeal-list" class="space-y-4">
-            <div class="p-4 text-center text-gray-500 bg-white rounded-lg shadow">
-                <span class="animate-pulse">핫딜 정보를 불러오는 중...</span>
+            <div class="glass-morphism p-6 text-center rounded-2xl shadow-lg">
+                <div class="animate-pulse flex items-center justify-center space-x-2">
+                    <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
+                    <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+                    <span class="ml-3 text-gray-600">핫딜 정보를 불러오는 중...</span>
+                </div>
             </div>
         </div>
         
-        <div id="pagination" class="mt-6"></div>
+        <!-- 페이지네이션 -->
+        <div id="pagination" class="mt-8"></div>
     </div>
+
+    <script>
+        // 네이버 로그인
+        async function naverLogin() {
+            const response = await fetch('/api/auth/naver/login');
+            const data = await response.json();
+            window.location.href = data.url;
+        }
+        
+        // 로그아웃
+        function logout() {
+            if (confirm('로그아웃 하시겠습니까?')) {
+                localStorage.removeItem('token');
+                location.reload();
+            }
+        }
+        
+        // 페이지 로드 시 토큰 확인
+        window.addEventListener('DOMContentLoaded', async () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const token = urlParams.get('token');
+            
+            if (token) {
+                localStorage.setItem('token', token);
+                window.history.replaceState({}, document.title, "/");
+            }
+            
+            const savedToken = localStorage.getItem('token');
+            if (savedToken) {
+                try {
+                    const response = await fetch('/api/auth/me', {
+                        headers: { 'Authorization': `Bearer ${savedToken}` }
+                    });
+                    
+                    if (response.ok) {
+                        const user = await response.json();
+                        
+                        document.getElementById('loginBtn').classList.add('hidden');
+                        document.getElementById('userInfo').classList.remove('hidden');
+                        document.getElementById('username').textContent = user.username;
+                        document.getElementById('userEmail').textContent = user.email;
+                        
+                        // 프로필 이미지 처리
+                        if (user.profile_image && user.profile_image.trim()) {
+                            document.getElementById('profileImg').src = user.profile_image;
+                            document.getElementById('profileImg').classList.remove('hidden');
+                            document.getElementById('profileInitial').style.display = 'none';
+                        } else {
+                            // 이름 첫 글자로 아바타 생성
+                            const initial = user.username.charAt(0).toUpperCase();
+                            document.getElementById('profileInitial').textContent = initial;
+                        }
+                        
+                        console.log('로그인 성공:', user);
+                    } else {
+                        localStorage.removeItem('token');
+                    }
+                } catch (error) {
+                    console.error('유저 정보 로드 실패:', error);
+                    localStorage.removeItem('token');
+                }
+            }
+        });
+    </script>
 
     <script src="/main.js" defer></script>
 </body>
