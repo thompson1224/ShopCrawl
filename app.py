@@ -35,13 +35,22 @@ print(f"NAVER_CLIENT_ID: {os.getenv('NAVER_CLIENT_ID', 'NOT_FOUND')}")
 print(f"NAVER_CLIENT_SECRET: {os.getenv('NAVER_CLIENT_SECRET', 'NOT_FOUND')[:10]}...")
 print("=" * 50)
 
-# 네이버 설정
+
+# Railway에서 제공하는 PORT 사용 (없으면 8000)
+PORT = int(os.getenv("PORT", 8000))
+
+# 네이버 로그인 콜백 URL (배포 후 변경 필요)
+RAILWAY_URL = os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost:8000")
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
-NAVER_CALLBACK_URL = "http://localhost:8000/api/auth/naver/callback"
+NAVER_CALLBACK_URL = f"https://{RAILWAY_URL}/api/auth/naver/callback" if RAILWAY_URL != "localhost:8000" else "http://localhost:8000/api/auth/naver/callback"
+# # 네이버 설정
+# NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
+# NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
+# NAVER_CALLBACK_URL = "http://localhost:8000/api/auth/naver/callback"
 
-if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
-    print("⚠️ 경고: 네이버 로그인 키가 설정되지 않았습니다!")
+# if not NAVER_CLIENT_ID or not NAVER_CLIENT_SECRET:
+#     print("⚠️ 경고: 네이버 로그인 키가 설정되지 않았습니다!")
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
