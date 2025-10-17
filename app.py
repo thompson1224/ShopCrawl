@@ -77,13 +77,6 @@ async def add_csp_header(request: Request, call_next):
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-# 데이터베이스 세션
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # 크롤링 함수들
 async def scrape_ppomppu():
