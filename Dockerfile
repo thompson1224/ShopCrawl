@@ -38,8 +38,10 @@ RUN playwright install chromium
 # 애플리케이션 파일 복사
 COPY . .
 
-# 포트 노출
-EXPOSE 8000
 
-# 서버 실행
-CMD uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}
+# Railway가 제공하는 PORT 사용
+ENV PORT=8000
+EXPOSE $PORT
+
+# uvicorn이 환경변수 PORT를 직접 사용하도록 수정
+CMD sh -c "uvicorn app:app --host 0.0.0.0 --port $PORT"

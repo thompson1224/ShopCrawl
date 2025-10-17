@@ -707,5 +707,9 @@ async def read_root():
 
 #app.mount("/", StaticFiles(directory=templates_dir, html=True), name="static")
 
+# 새 코드 (Railway에서는 사용 안 함)
 if __name__ == '__main__':
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    import sys
+    port = int(os.getenv("PORT", 8000))
+    print(f"🚀 로컬 서버 시작: http://localhost:{port}")
+    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
