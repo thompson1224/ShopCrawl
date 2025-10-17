@@ -6,14 +6,23 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from models import User, SessionLocal
-from dotenv import load_dotenv
 import os
 
-load_dotenv()
+# .env 파일 로드 (로컬 개발용, 배포 환경에서는 무시됨)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except:
+    pass
 
+# SECRET_KEY 가져오기 (환경변수에서 직접)
 SECRET_KEY = os.getenv("SECRET_KEY")
+
+# Railway 환경에서는 에러 메시지만 출력하고 계속 진행
 if not SECRET_KEY:
-    raise ValueError("❌ SECRET_KEY가 .env 파일에 설정되지 않았습니다!")
+    print("⚠️ WARNING: SECRET_KEY가 설정되지 않았습니다. 기본값을 사용합니다.")
+    print("⚠️ 프로덕션 환경에서는 반드시 SECRET_KEY 환경변수를 설정하세요!")
+    SECRET_KEY = "temporary-secret-key-please-change-in-production-" + os.urandom(16).hex()
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7일
@@ -32,7 +41,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """JWT 토큰 생성"""
     to_encode = data.copy()
     
-    # subject를 문자열로 변환 (필수!)
+    # subject를 문자열로 변환
     if "sub" in to_encode:
         to_encode["sub"] = str(to_encode["sub"])
     
@@ -49,7 +58,7 @@ def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ) -> Optional[User]:
-    """현재 로그인한 유저 정보 가져오기 (선택적)"""
+    """현재 로그인한 유저 정보 가져오기"""
     if not credentials:
         return None
     
@@ -60,7 +69,6 @@ def get_current_user(
         if user_id_str is None:
             return None
         
-        # 문자열을 정수로 변환
         user_id = int(user_id_str)
         
     except (JWTError, ValueError) as e:
@@ -74,7 +82,7 @@ def get_current_user_required(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
-    """로그인 필수 (없으면 에러)"""
+    """로그인 필수"""
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
