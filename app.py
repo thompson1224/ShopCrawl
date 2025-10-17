@@ -712,7 +712,7 @@ templates_dir = os.path.join(current_dir, "templates")
 async def read_root():
     return os.path.join(templates_dir, "index.html")
 
-app.mount("/", StaticFiles(directory=templates_dir, html=True), name="static")
+#app.mount("/", StaticFiles(directory=templates_dir, html=True), name="static")
 
 if __name__ == '__main__':
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
