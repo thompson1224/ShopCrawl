@@ -9,6 +9,8 @@ from fastapi import FastAPI, Request, Depends, HTTPException
 from sqlalchemy.orm import Session
 from auth import create_access_token, get_current_user, get_current_user_required, get_db
 from models import User
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 import uvicorn
 import asyncio
@@ -57,6 +59,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# 정적 파일 마운트 (templates 폴더)
+try:
+    app.mount("/static", StaticFiles(directory="templates"), name="static")
+except:
+    pass
+
+templates = Jinja2Templates(directory="templates")
 
 # CORS 설정
 @app.middleware("http")
