@@ -478,13 +478,26 @@ scheduler = AsyncIOScheduler()
 async def startup_event():
     logger.info("🚀 서버 시작: 백그라운드 스케줄러 활성화")
     
-    # 첫 크롤링 실행
-    await crawl_and_save_to_db()
+    # 서버 시작 후 5초 뒤 첫 크롤링 (Railway 헬스체크 통과 위해)
+    scheduler.add_job(
+        crawl_and_save_to_db, 
+        'date', 
+        run_date=datetime.now(KST) + timedelta(seconds=5),
+        id='first_crawl',
+        timezone=KST
+    )
     
-    # 1분마다 크롤링 스케줄 (테스트용, 실제로는 5분 추천)
-    scheduler.add_job(crawl_and_save_to_db, 'interval', minutes=1, id='crawl_job')
+    # 1분마다 크롤링 스케줄
+    scheduler.add_job(
+        crawl_and_save_to_db, 
+        'interval', 
+        minutes=1, 
+        id='crawl_job',
+        timezone=KST
+    )
+    
     scheduler.start()
-    logger.info("⏰ 1분마다 자동 크롤링 스케줄 등록")
+    logger.info("⏰ 서버 시작 5초 후 첫 크롤링, 이후 1분마다 자동 크롤링")
 
 @app.on_event("shutdown")
 async def shutdown_event():
