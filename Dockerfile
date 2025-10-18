@@ -42,4 +42,5 @@ COPY . .
 # Railway가 제공하는 PORT 사용
 EXPOSE 8080  
 
+CMD uvicorn app:app --host 0.0.0.0 --port ${PORT:-8080}
 
