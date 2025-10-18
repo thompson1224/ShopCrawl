@@ -714,6 +714,12 @@ async def naver_callback(code: str, state: str, db: Session = Depends(get_db)):
 current_dir = os.path.dirname(os.path.abspath(__file__))
 templates_dir = os.path.join(current_dir, "templates")
 
+# main.js 직접 서빙 추가
+@app.get("/main.js")
+async def serve_main_js():
+    file_path = os.path.join(templates_dir, "main.js")
+    return FileResponse(file_path, media_type="application/javascript")
+
 @app.get("/", response_class=FileResponse)
 async def read_root():
     return os.path.join(templates_dir, "index.html")
