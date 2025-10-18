@@ -40,8 +40,6 @@ COPY . .
 
 
 # Railway가 제공하는 PORT 사용
-ENV PORT=8000
-EXPOSE $PORT
+EXPOSE 8080  
 
-# uvicorn이 환경변수 PORT를 직접 사용하도록 수정
-CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"]
+
