@@ -24,6 +24,8 @@ from models import HotDeal, SessionLocal
 from datetime import datetime, timedelta
 import logging
 import pytz
+import shutil
+
 
 # 환경변수 로드 (선택)
 from dotenv import load_dotenv
@@ -470,9 +472,42 @@ async def crawl_and_save_to_db():
     finally:
         db.close()
 
+def backup_database():
+    """DB 백업 (Railway Volume 내부에 저장)"""
+    if os.getenv("RAILWAY_ENVIRONMENT"):
+        db_path = "/data/hotdeals.db"
+        backup_dir = "/data/backups"
+        
+        # 백업 디렉토리 생성
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        timestamp = datetime.now(KST).strftime('%Y%m%d_%H%M%S')
+        backup_path = f"{backup_dir}/hotdeals_backup_{timestamp}.db"
+        
+        try:
+            shutil.copy2(db_path, backup_path)
+            logger.info(f"✅ DB 백업 완료: {backup_path}")
+            
+            # 오래된 백업 삭제 (최근 7개만 유지)
+            backups = sorted(
+                [f for f in os.listdir(backup_dir) if f.startswith("hotdeals_backup_")],
+                reverse=True
+            )
+            for old_backup in backups[7:]:
+                old_path = os.path.join(backup_dir, old_backup)
+                os.remove(old_path)
+                logger.info(f"🗑️ 오래된 백업 삭제: {old_backup}")
+                
+        except Exception as e:
+            logger.error(f"❌ DB 백업 실패: {e}")
+    else:
+        logger.info("⏭️ 로컬 환경: DB 백업 스킵")
+
 # 스케줄러 설정
 scheduler = AsyncIOScheduler()
 
+
+# FastAPI 이벤트 핸들러
 # FastAPI 이벤트 핸들러
 @app.on_event("startup")
 async def startup_event():
@@ -496,8 +531,19 @@ async def startup_event():
         timezone=KST
     )
     
+    # 매일 새벽 3시 DB 백업 (추가)
+    scheduler.add_job(
+        backup_database, 
+        'cron', 
+        hour=3, 
+        minute=0,
+        id='backup_job',
+        timezone=KST
+    )
+    
     scheduler.start()
     logger.info("⏰ 서버 시작 5초 후 첫 크롤링, 이후 1분마다 자동 크롤링")
+    logger.info("💾 매일 새벽 3시 DB 자동 백업 활성화")
 
 @app.on_event("shutdown")
 async def shutdown_event():
