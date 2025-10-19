@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>핫딜 정보 포털</title>
+    <title>딜냥이 - 핫딜 정보 포털</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,6 +13,8 @@
             font-family: 'Noto Sans KR', sans-serif; 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            margin: 0;
+            padding: 0;
         }
         .source-btn.active { 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -22,6 +24,7 @@
         }
         .deal-item-container {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
         }
         .deal-item-container:hover { 
             transform: translateY(-8px); 
@@ -57,23 +60,97 @@
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.3);
         }
+        
+        /* 모바일 최적화 */
+        .source-btn {
+            padding: 0.6rem 1rem; /* 모바일 패딩 조정 */
+            font-size: 0.875rem;
+        }
+
+        /* 제목 줄 바꿈 개선 */
+        .deal-item-container h2 {
+            line-height: 1.3;
+        }
+        
+        /* 이미지 오버플로우 방지 */
+        .w-24.h-24 {
+            max-width: 4rem;
+            height: auto;
+        }
+
+        /* 모바일 가로 폭 조정 */
+        @media (max-width: 640px) {
+            .container {
+                width: 95%;
+                padding: 0.5rem;
+            }
+            .source-btn {
+                padding: 0.5rem 0.75rem;
+                font-size: 0.8rem;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .p-6 {
+                padding: 1rem;
+            }
+            .text-3xl {
+                font-size: 1.6rem;
+            }
+            .hotdeal-item {
+                flex-direction: column;
+            }
+            .hotdeal-item .content-wrapper {
+                width: 100%;
+                margin-left: 0;
+                margin-top: 0.5rem;
+            }
+            .hotdeal-item .content-wrapper h2 {
+                font-size: 1rem;
+            }
+            .hotdeal-item .thumbnail {
+                width: 100%;
+                height: auto;
+            }
+        }
+        
+        /* 고양이 발자국 애니메이션 */
+        .paw-print {
+            display: inline-block;
+            font-size: 1.5rem;
+            animation: paw-bounce 0.6s infinite;
+        }
+        .paw-print:nth-child(1) { animation-delay: 0s; }
+        .paw-print:nth-child(2) { animation-delay: 0.2s; }
+        .paw-print:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes paw-bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        /* 이미지 오류 핸들링 */
+        .thumbnail-element, .placeholder-image {
+            object-fit: cover;
+            min-height: 4rem;
+        }
     </style>
 </head>
 <body class="p-6">
     <div class="container mx-auto max-w-4xl">
         <!-- 헤더 -->
         <div class="glass-morphism rounded-2xl p-6 mb-8 shadow-2xl">
-            <div class="flex justify-between items-center">
-                <div>
+            <div class="flex flex-col sm:flex-row justify-between items-center">
+                <div class="text-center sm:text-left mb-4 sm:mb-0">
                     <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent">
-                        🔥 핫딜모아
+                        🐱 딜냥이
                     </h1>
-                    <p class="text-sm text-gray-500 mt-1">실시간 최저가 핫딜 정보</p>
+                    <p class="text-sm text-gray-500 mt-1">핫딜을 물어다주는 귀여운 냥이</p>
                 </div>
                 
-                <div id="auth-section">
+                <div id="auth-section" class="w-full sm:w-auto">
                     <!-- 로그인 전 -->
-                    <button id="loginBtn" onclick="naverLogin()" class="naver-login-btn px-6 py-3 text-white font-semibold rounded-xl shadow-lg flex items-center space-x-2">
+                    <button id="loginBtn" onclick="naverLogin()" class="naver-login-btn w-full sm:w-auto px-6 py-3 text-white font-semibold rounded-xl shadow-lg flex items-center justify-center sm:justify-start space-x-2">
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M16.273 12.845L7.376 0H0v24h7.726V11.156L16.624 24H24V0h-7.727v12.845z"/>
                         </svg>
@@ -82,7 +159,7 @@
                     
                     <!-- 로그인 후 -->
                     <div id="userInfo" class="hidden profile-container relative">
-                        <div class="flex items-center space-x-3 bg-white rounded-xl px-4 py-2 shadow-md cursor-pointer hover:shadow-lg transition-all">
+                        <div class="flex items-center justify-center sm:justify-start space-x-3 bg-white rounded-xl px-4 py-2 shadow-md cursor-pointer hover:shadow-lg transition-all">
                             <div class="relative">
                                 <img id="profileImg" src="" class="w-10 h-10 rounded-full border-2 border-purple-500 hidden">
                                 <div id="profileInitial" class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg"></div>
@@ -112,32 +189,35 @@
         </div>
 
         <!-- 소스 필터 -->
-        <div id="source-buttons" class="flex justify-center flex-wrap gap-3 mb-8">
-            <button data-source="all" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 active">
+        <div id="source-buttons" class="flex justify-center flex-wrap gap-2 mb-8">
+            <button data-source="all" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap active">
                 🔥 전체보기
             </button>
-            <button data-source="뽐뿌" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200">
+            <button data-source="뽐뿌" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
                 💰 뽐뿌
             </button>
-            <button data-source="루리웹" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200">
+            <button data-source="루리웹" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
                 🎮 루리웹
             </button>
-            <button data-source="Zod" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200">
+            <button data-source="Zod" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
                 🛒 Zod
             </button>
-            <button data-source="어미새" class="source-btn px-6 py-3 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200">
+            <button data-source="어미새" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
                 🐦 어미새
+            </button>
+            <button data-source="퀘이사존" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
+                🖥️ 퀘이사존
             </button>
         </div>
         
         <!-- 핫딜 리스트 -->
         <div id="hotdeal-list" class="space-y-4">
             <div class="glass-morphism p-6 text-center rounded-2xl shadow-lg">
-                <div class="animate-pulse flex items-center justify-center space-x-2">
-                    <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
-                    <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                    <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
-                    <span class="ml-3 text-gray-600">핫딜 정보를 불러오는 중...</span>
+                <div class="flex items-center justify-center space-x-2">
+                    <span class="paw-print">🐾</span>
+                    <span class="paw-print">🐾</span>
+                    <span class="paw-print">🐾</span>
+                    <span class="ml-3 text-gray-600">딜냥이가 핫딜을 물어오는 중...</span>
                 </div>
             </div>
         </div>

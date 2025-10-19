@@ -258,6 +258,105 @@ async def scrape_zod():
     logger.info(f"Zod 크롤링 완료: {len(deal_list)}개")
     return deal_list
 
+# 퀘이사존 크롤
+async def scrape_quasarzone():
+    logger.info("퀘이사존 크롤링 시작")
+    deal_list = []
+    
+    try:
+        # httpx로 간단하게 크롤링 (정적 HTML)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                'https://quasarzone.com/bbs/qb_saleinfo',
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+                    'Referer': 'https://quasarzone.com'
+                },
+                timeout=15.0
+            )
+            response.raise_for_status()
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        logger.info(f"퀘이사존 HTML 길이: {len(response.text)}")
+        
+        # 게시글 리스트 찾기
+        posts = soup.find_all('div', class_='market-info-list')
+        logger.info(f"퀘이사존: {len(posts)}개 게시글 발견")
+        
+        for idx, item in enumerate(posts[:20]):  # 최대 20개
+            try:
+                # 썸네일
+                thumbnail = ""
+                thumb_wrap = item.find('div', class_='thumb-wrap')
+                if thumb_wrap:
+                    img_tag = thumb_wrap.find('img', class_='maxImg')
+                    if img_tag and img_tag.get('src'):
+                        thumbnail_src = img_tag['src']
+                        if thumbnail_src.startswith('//'):
+                            thumbnail = 'https:' + thumbnail_src
+                        elif thumbnail_src.startswith('http'):
+                            thumbnail = thumbnail_src
+                        elif thumbnail_src.startswith('/'):
+                            thumbnail = 'https://quasarzone.com' + thumbnail_src
+                
+                # 제목 및 링크
+                cont = item.find('div', class_='market-info-list-cont')
+                if not cont:
+                    continue
+                
+                tit = cont.find('p', class_='tit')
+                if not tit:
+                    continue
+                
+                link_tag = tit.find('a', class_='subject-link')
+                if not link_tag:
+                    continue
+                
+                title = link_tag.get_text(strip=True)
+                href = link_tag.get('href', '')
+                
+                if href.startswith('/'):
+                    link = 'https://quasarzone.com' + href
+                elif href.startswith('http'):
+                    link = href
+                else:
+                    link = 'https://quasarzone.com/' + href
+                
+                # 작성자
+                author = "작성자"
+                nick_wrap = cont.find('span', class_='nick')
+                if nick_wrap:
+                    author = nick_wrap.get_text(strip=True)
+                
+                # 가격 추출 (제목에서)
+                price_match = re.search(r'(\d{1,3}(?:,\d{3})*원)', title)
+                price = price_match.group(1) if price_match else "가격 정보 없음"
+                
+                # 배송비
+                shipping = "무료배송" if "무료" in title or "무배" in title else "정보 없음"
+                
+                deal_list.append({
+                    'thumbnail': thumbnail,
+                    'source': '퀘이사존',
+                    'author': author,
+                    'title': title,
+                    'price': price,
+                    'shipping': shipping,
+                    'link': link
+                })
+                
+                logger.debug(f"퀘이사존 항목 {idx+1}: {title[:30]}...")
+                
+            except Exception as e:
+                logger.warning(f"퀘이사존 항목 {idx+1} 파싱 오류: {e}")
+                continue
+        
+    except Exception as e:
+        logger.error(f"퀘이사존 크롤링 전체 오류: {e}")
+    
+    logger.info(f"퀘이사존 크롤링 완료: {len(deal_list)}개")
+    return deal_list
+
 #어미새 크롤
 async def scrape_eomisae():
     logger.info("어미새 크롤링 시작")
@@ -421,7 +520,7 @@ async def crawl_and_save_to_db():
     logger.info(f"=== 백그라운드 크롤링 시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
     
     # 모든 크롤러 실행
-    tasks = [scrape_ppomppu(), scrape_ruliweb(), scrape_zod(), scrape_eomisae()]
+    tasks = [scrape_ppomppu(), scrape_ruliweb(), scrape_zod(), scrape_eomisae(), scrape_quasarzone()]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     all_deals = []
@@ -567,8 +666,7 @@ async def hotdeals(
     total = query.count()
     
     # id 기준 내림차순 (가장 확실한 방법)
-    query = query.order_by(desc(HotDeal.id))
-    
+    query = query.order_by(desc(HotDeal.created_at))    
     # 페이지네이션
     offset = (page - 1) * per_page
     deals = query.offset(offset).limit(per_page).all()
@@ -596,13 +694,15 @@ async def stats(db: Session = Depends(get_db)):
     ruliweb_count = db.query(HotDeal).filter(HotDeal.source == '루리웹').count()
     zod_count = db.query(HotDeal).filter(HotDeal.source == 'Zod').count()
     eomisae_count = db.query(HotDeal).filter(HotDeal.source == '어미새').count()
+    quasarzone_count = db.query(HotDeal).filter(HotDeal.source == '퀘이사존').count()
     
     return {
         "total": total,
         "ppomppu": ppomppu_count,
         "ruliweb": ruliweb_count,
         "zod": zod_count,
-        "eomisae" : eomisae_count
+        "eomisae" : eomisae_count,
+        "quasarzone": quasarzone_count
     }
 
 # 수동 크롤링 API (테스트용)
@@ -615,7 +715,7 @@ async def manual_crawl():
 # 이미지 프록시
 @app.get("/image-proxy")
 async def image_proxy(url: str, source: str = "뽐뿌"):
-    referer_map = { "뽐뿌": "https://www.ppomppu.co.kr/", "루리웹": "https://bbs.ruliweb.com/", "Zod": "https://zod.kr/", "어미새": "https://eomisae.co.kr/"}
+    referer_map = { "뽐뿌": "https://www.ppomppu.co.kr/", "루리웹": "https://bbs.ruliweb.com/", "Zod": "https://zod.kr/", "어미새": "https://eomisae.co.kr/", "퀘이사존": "https://quasarzone.com/"}
     headers = { 'Referer': referer_map.get(source, "https://www.google.com/"), 'User-Agent': 'Mozilla/5.0' }
     async with httpx.AsyncClient() as client:
         try:
