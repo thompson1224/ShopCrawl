@@ -43,11 +43,19 @@ print("=" * 50)
 # Railway에서 제공하는 PORT 사용 (없으면 8000)
 PORT = int(os.getenv("PORT", 8000))
 
-# 네이버 로그인 콜백 URL (배포 후 변경 필요)
-RAILWAY_URL = os.getenv("RAILWAY_PUBLIC_DOMAIN", "localhost:8000")
+# 네이버 로그인 콜백 URL
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
-NAVER_CALLBACK_URL = f"https://{RAILWAY_URL}/api/auth/naver/callback" if RAILWAY_URL != "localhost:8000" else "http://localhost:8000/api/auth/naver/callback"
+APP_NAME = os.getenv("FLY_APP_NAME") 
+if APP_NAME:
+    # Fly.io 배포 환경
+    BASE_URL = f"https://shopcrwal.fly.dev"
+    NAVER_CALLBACK_URL = f"http://www.dealcat.co.kr/api/auth/naver/callback"
+else:
+    # 로컬 환경 (localhost:8000)
+    BASE_URL = "http://localhost:8000"
+    NAVER_CALLBACK_URL = f"http://localhost:8000/api/auth/naver/callback"
+
 # # 네이버 설정
 # NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 # NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
@@ -573,7 +581,7 @@ async def crawl_and_save_to_db():
 
 def backup_database():
     """DB 백업 (Railway Volume 내부에 저장)"""
-    if os.getenv("RAILWAY_ENVIRONMENT"):
+    if os.getenv("shopcrawl"):
         db_path = "/data/hotdeals.db"
         backup_dir = "/data/backups"
         
@@ -808,7 +816,7 @@ async def naver_callback(code: str, state: str, db: Session = Depends(get_db)):
         jwt_token = create_access_token(data={"sub": user.id})
         
         # 5. 프론트엔드로 리다이렉트 (토큰 전달)
-        frontend_url = f"http://localhost:8000/?token={jwt_token}"
+        frontend_url = f"http://www.dealcat.co.kr//?token={jwt_token}"
         
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=frontend_url)
