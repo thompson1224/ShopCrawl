@@ -4,9 +4,9 @@ primary_region = 'nrt'
 
 [build]
 
-# 1. VM 사양을 무료 티어(256MB)로 고정
+# 1. VM 사양을
 [vm]
-  size = "shared-cpu-1x"
+  size = "shared-cpu-1x-512mb"
 
 # 2. http_service 섹션 정리
 [http_service]

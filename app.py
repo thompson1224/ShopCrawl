@@ -633,7 +633,7 @@ async def startup_event():
     scheduler.add_job(
         crawl_and_save_to_db, 
         'interval', 
-        minutes=1, 
+        minutes=3, 
         id='crawl_job',
         timezone=KST
     )
