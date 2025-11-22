@@ -201,3 +201,74 @@ document.addEventListener('DOMContentLoaded', () => {
     // 최초 로딩
     fetchHotDeals('all', 1);
 });
+
+// --- AI 검색 기능 ---
+
+async function performAiSearch() {
+    const input = document.getElementById('aiSearchInput');
+    const resultArea = document.getElementById('aiResultArea');
+    const loading = document.getElementById('aiLoading');
+    const answerBox = document.getElementById('aiAnswerBox');
+    const answerText = document.getElementById('aiAnswerText');
+    const sourceList = document.getElementById('aiSourceList');
+
+    const query = input.value.trim();
+    if (!query) {
+        alert('찾고 싶은 물건을 물어봐달라냥! 😺');
+        return;
+    }
+
+    // UI 초기화 및 로딩 시작
+    resultArea.classList.remove('hidden');
+    loading.classList.remove('hidden');
+    answerBox.classList.add('hidden');
+    sourceList.classList.add('hidden');
+    
+    // 기존 추천 목록 비우기 (제목 제외)
+    while (sourceList.children.length > 1) {
+        sourceList.removeChild(sourceList.lastChild);
+    }
+
+    try {
+        // 백엔드 API 호출
+        const response = await fetch(`/api/search/ai?query=${encodeURIComponent(query)}`);
+        const data = await response.json();
+
+        // 로딩 끝
+        loading.classList.add('hidden');
+        answerBox.classList.remove('hidden');
+
+        // 답변 출력 (줄바꿈 처리)
+        answerText.innerHTML = data.answer.replace(/\n/g, '<br>');
+
+        // 추천 상품이 있다면 표시
+        if (data.sources && data.sources.length > 0) {
+            sourceList.classList.remove('hidden');
+            
+            data.sources.forEach(source => {
+                // 심플한 미니 카드 생성
+                const card = document.createElement('a');
+                card.href = source.link;
+                card.target = '_blank';
+                card.className = 'block bg-white p-3 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-purple-200 transition-all flex items-center justify-between group';
+                
+                card.innerHTML = `
+                    <div class="flex items-center space-x-2 overflow-hidden">
+                        <span class="text-lg">🛍️</span>
+                        <span class="text-sm text-gray-700 truncate group-hover:text-purple-600 transition-colors">${source.title}</span>
+                    </div>
+                    <svg class="w-4 h-4 text-gray-300 group-hover:text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                `;
+                sourceList.appendChild(card);
+            });
+        }
+
+    } catch (error) {
+        console.error('AI 검색 실패:', error);
+        loading.classList.add('hidden');
+        answerBox.classList.remove('hidden');
+        answerText.textContent = "지금 딜냥이가 너무 바빠서 대답할 수 없다냥... 😿 잠시 후에 다시 물어봐줘!";
+    }
+}

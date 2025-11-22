@@ -26,3 +26,10 @@ python-dotenv==1.0.1
 
 # 시간대
 pytz==2024.2
+
+#LLM
+langchain-google-genai==2.0.1
+langchain==0.3.7
+langchain-chroma==0.1.4
+chromadb==0.5.18
+google-generativeai==0.8.3

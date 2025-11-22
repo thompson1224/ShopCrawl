@@ -11,6 +11,12 @@ from auth import create_access_token, get_current_user, get_current_user_require
 from models import User
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 
 import uvicorn
 import asyncio
@@ -25,6 +31,7 @@ from datetime import datetime, timedelta
 import logging
 import pytz
 import shutil
+import google.generativeai as genai
 
 
 # 환경변수 로드 (선택)
@@ -39,6 +46,9 @@ print(f"NAVER_CLIENT_ID: {os.getenv('NAVER_CLIENT_ID', 'NOT_FOUND')}")
 print(f"NAVER_CLIENT_SECRET: {os.getenv('NAVER_CLIENT_SECRET', 'NOT_FOUND')[:10]}...")
 print("=" * 50)
 
+#LLM 관련 키
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+CHROMA_DB_DIR = "/data/chroma_db" if os.getenv("FLY_APP_NAME") else "./chroma_db"
 
 # Railway에서 제공하는 PORT 사용 (없으면 8000)
 PORT = int(os.getenv("PORT", 8000))
@@ -49,12 +59,12 @@ NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
 APP_NAME = os.getenv("FLY_APP_NAME") 
 if APP_NAME:
     # Fly.io 배포 환경
-    BASE_URL = f"https://shopcrwal.fly.dev"
-    NAVER_CALLBACK_URL = f"http://www.dealcat.co.kr/api/auth/naver/callback"
+    BASE_URL = f"https://{APP_NAME}.fly.dev"
+    NAVER_CALLBACK_URL = f"{BASE_URL}/api/auth/naver/callback"
 else:
     # 로컬 환경 (localhost:8000)
     BASE_URL = "http://localhost:8000"
-    NAVER_CALLBACK_URL = f"http://localhost:8000/api/auth/naver/callback"
+    NAVER_CALLBACK_URL = f"{BASE_URL}/api/auth/naver/callback"
 
 # # 네이버 설정
 # NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
@@ -527,54 +537,87 @@ KST = pytz.timezone('Asia/Seoul')
 async def crawl_and_save_to_db():
     logger.info(f"=== 백그라운드 크롤링 시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===")
     
-    # 모든 크롤러 실행
-    tasks = [scrape_ppomppu(), scrape_ruliweb(), scrape_zod(), scrape_eomisae(), scrape_quasarzone()]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
     all_deals = []
-    for result in results:
-        if not isinstance(result, Exception):
-            all_deals.extend(result)
     
-    # DB에 저장 (중복 체크 개선)
+    # --- 1. 가벼운 httpx 작업 (병렬 실행) ---
+    logger.info("--- 1단계: httpx 크롤러 (병렬) 시작 ---")
+    httpx_tasks = [scrape_ppomppu(), scrape_quasarzone()]
+    results_httpx = await asyncio.gather(*httpx_tasks, return_exceptions=True)
+    
+    for result in results_httpx:
+        if isinstance(result, Exception):
+            logger.error(f"httpx 크롤링 오류: {result}")
+        else:
+            all_deals.extend(result)
+    logger.info("--- 1단계: httpx 크롤러 완료 ---")
+
+    # --- 2. 무거운 Playwright 작업 (순차 실행) ---
+    playwright_scrapers = [scrape_ruliweb, scrape_zod, scrape_eomisae]
+    for scraper_func in playwright_scrapers:
+        try:
+            result_pw = await scraper_func() 
+            if result_pw:
+                all_deals.extend(result_pw)
+        except Exception as e:
+            logger.error(f"Playwright 작업 ({scraper_func.__name__}) 실행 중 오류 발생: {e}")
+    logger.info("--- 2단계: Playwright 크롤러 완료 ---")
+
+    # --- 3. DB 및 벡터 DB 저장 ---
+    if not all_deals:
+        return
+
     db = SessionLocal()
     new_count = 0
     duplicate_count = 0
-    error_count = 0
     
+    # RAG(벡터DB)에 추가할 문서 리스트
+    new_deals_for_rag = []
+
     try:
         for deal in all_deals:
             try:
                 existing = db.query(HotDeal).filter(HotDeal.link == deal['link']).first()
                 
                 if existing:
-                    # 기존 데이터 업데이트
                     existing.title = deal['title']
                     existing.price = deal['price']
                     existing.shipping = deal['shipping']
                     existing.thumbnail = deal['thumbnail']
                     duplicate_count += 1
                 else:
-                    # 새 데이터 추가
                     db_deal = HotDeal(**deal, created_at=datetime.now(KST).replace(tzinfo=None))
                     db.add(db_deal)
                     new_count += 1
+                    
+                    # [RAG] 신규 핫딜을 벡터 문서로 변환
+                    new_deals_for_rag.append(
+                        Document(
+                            page_content=f"[{deal['source']}] {deal['title']} - 가격: {deal['price']}",
+                            metadata={"link": deal['link'], "source": deal['source'], "price": deal['price']}
+                        )
+                    )
                 
                 db.flush()
-                
-            except Exception as item_error:
-                logger.warning(f"항목 저장 실패: {deal.get('link', 'unknown')} - {str(item_error)}")
-                error_count += 1
+            except Exception:
                 continue
         
         db.commit()
         
-        # DB 전체 개수 확인
+        # --- 4. 벡터 DB(Chroma)에 신규 데이터 추가 ---
+        if new_deals_for_rag and GOOGLE_API_KEY:
+            try:
+                vectorstore = get_vectorstore()
+                if vectorstore:
+                    vectorstore.add_documents(new_deals_for_rag)
+                    logger.info(f"🧠 RAG: 신규 핫딜 {len(new_deals_for_rag)}개를 Gemini 기억장치에 저장했습니다.")
+            except Exception as rag_error:
+                logger.error(f"🧠 RAG 저장 실패: {rag_error}")
+
         total_count = db.query(HotDeal).count()
-        logger.info(f"✅ DB 저장 완료: 신규 {new_count}개, 업데이트 {duplicate_count}개, 오류 {error_count}개, 전체 {total_count}개 - {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"✅ DB 저장 완료: 신규 {new_count}, 전체 {total_count}")
         
     except Exception as e:
-        logger.error(f"❌ DB 저장 전체 오류: {e}")
+        logger.error(f"❌ DB 저장 오류: {e}")
         db.rollback()
     finally:
         db.close()
@@ -610,6 +653,25 @@ def backup_database():
     else:
         logger.info("⏭️ 로컬 환경: DB 백업 스킵")
 
+#Vector store
+def get_vectorstore():
+    """벡터 DB(기억장치) 가져오기 - Gemini 버전"""
+    if not GOOGLE_API_KEY:
+        return None
+    
+    # 구글의 무료 임베딩 모델 사용
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="models/text-embedding-004", 
+        google_api_key=GOOGLE_API_KEY
+    )
+    
+    vectorstore = Chroma(
+        persist_directory=CHROMA_DB_DIR,
+        embedding_function=embeddings,
+        collection_name="hotdeals"
+    )
+    return vectorstore
+
 # 스케줄러 설정
 scheduler = AsyncIOScheduler()
 
@@ -633,7 +695,7 @@ async def startup_event():
     scheduler.add_job(
         crawl_and_save_to_db, 
         'interval', 
-        minutes=3, 
+        minutes=5, 
         id='crawl_job',
         timezone=KST
     )
@@ -816,10 +878,96 @@ async def naver_callback(code: str, state: str, db: Session = Depends(get_db)):
         jwt_token = create_access_token(data={"sub": user.id})
         
         # 5. 프론트엔드로 리다이렉트 (토큰 전달)
-        frontend_url = f"http://www.dealcat.co.kr//?token={jwt_token}"
+        frontend_url = f"{BASE_URL}/?token={jwt_token}"
         
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=frontend_url)
+
+# --- [디버깅용] 사용 가능한 Gemini 모델 리스트 확인 ---
+@app.get("/api/debug/models")
+async def list_available_models():
+    if not GOOGLE_API_KEY:
+        return {"error": "API Key 없음"}
+    
+    try:
+        genai.configure(api_key=GOOGLE_API_KEY)
+        models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                models.append(m.name)
+        return {"available_models": models}
+    except Exception as e:
+        return {"error": str(e)}
+
+#AI 검색 API    
+# --- AI 검색 API (Gemini) ---
+@app.get("/api/search/ai")
+async def search_ai(query: str):
+    """Gemini 기반 핫딜 검색"""
+    if not query:
+        return {"answer": "검색어를 입력해주세요."}
+    
+    if not GOOGLE_API_KEY:
+        return {"answer": "서버에 Google API 키가 설정되지 않았습니다."}
+
+    try:
+        vectorstore = get_vectorstore()
+        if not vectorstore:
+            return {"answer": "벡터 DB 초기화 실패"}
+
+        # 1. 관련 문서 검색 (상위 5개)
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+        docs = retriever.invoke(query)
+        
+        if not docs:
+            return {"answer": "관련된 핫딜을 찾지 못했어요 😿"}
+
+        # 2. Gemini 프롬프트 설정
+        template = """너는 핫딜 정보를 찾아주는 친절한 고양이 '딜냥이'야.
+        아래의 검색된 핫딜 목록을 보고 사용자의 질문에 답변해줘.
+        
+        [검색된 핫딜 목록]
+        {context}
+        
+        사용자 질문: {question}
+        
+        답변 가이드라인:
+        1. 질문과 가장 관련 있는 상품을 추천해줘.
+        2. 상품명, 가격, 쇼핑몰(출처)를 꼭 언급해줘.
+        3. 만약 찾는 물건이 없다면 없다고 솔직하게 말해줘.
+        4. 답변 끝에는 '이다냥~' 처럼 고양이 말투를 써줘.
+        """
+        prompt = ChatPromptTemplate.from_template(template)
+        
+        # Gemini 1.5 Flash 모델 사용 (무료 티어)
+        model = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",  # 현재 가장 안정적인 무료 모델
+            temperature=0,
+            google_api_key=GOOGLE_API_KEY,
+            transport="rest"  # <--- gRPC 대신 REST 사용
+        )
+        
+        # 3. 체인 실행
+        chain = (
+            {"context": lambda x: "\n".join([d.page_content for d in docs]), "question": RunnablePassthrough()}
+            | prompt
+            | model
+            | StrOutputParser()
+        )
+        
+        response = chain.invoke(query)
+        
+        # 출처 링크도 함께 반환
+        sources = [{"title": d.page_content, "link": d.metadata['link']} for d in docs]
+        
+        return {
+            "answer": response,
+            "sources": sources
+        }
+        
+    except Exception as e:
+        logger.error(f"AI 검색 오류: {e}")
+        return {"answer": "죄송해요, 츄르를 먹느라 답변을 못했어요 😿 (오류 발생)"}  
 
 # 현재 유저 정보 조회
 @app.get('/api/auth/me')
@@ -862,6 +1010,40 @@ async def naver_callback(code: str, state: str, db: Session = Depends(get_db)):
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url=frontend_url)
 
+# --- [관리자용] DB 강제 동기화 API ---
+@app.get("/api/admin/sync-rag")
+async def sync_rag_manually(db: Session = Depends(get_db)):
+    """기존 DB의 데이터를 벡터 DB로 강제 이식"""
+    if not GOOGLE_API_KEY:
+        return {"status": "error", "message": "Google API Key 없음"}
+    
+    try:
+        # 1. 모든 핫딜 가져오기
+        all_deals = db.query(HotDeal).all()
+        if not all_deals:
+            return {"status": "empty", "message": "DB에 데이터가 없습니다."}
+            
+        # 2. 벡터 문서로 변환
+        documents = []
+        for deal in all_deals:
+            doc = Document(
+                page_content=f"[{deal.source}] {deal.title} - 가격: {deal.price}",
+                metadata={"link": deal.link, "source": deal.source, "price": deal.price}
+            )
+            documents.append(doc)
+            
+        # 3. 벡터 DB에 저장
+        vectorstore = get_vectorstore()
+        if vectorstore:
+            # 기존 데이터가 있다면 중복 방지를 위해 초기화가 좋겠지만, 
+            # 일단 덮어쓰거나 추가하는 방식으로 진행 (Chroma는 ID 없으면 추가됨)
+            vectorstore.add_documents(documents)
+            
+        return {"status": "success", "message": f"총 {len(documents)}개의 핫딜을 AI에게 학습시켰습니다!"}
+        
+    except Exception as e:
+        logger.error(f"동기화 실패: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 # 정적 파일 제공
