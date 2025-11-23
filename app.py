@@ -905,7 +905,7 @@ async def list_available_models():
 @app.get("/api/search/ai")
 async def search_ai(query: str, db: Session = Depends(get_db)):
     """
-    [RAG 고도화] 하이브리드 검색 (벡터 + 키워드)
+    [RAG 고도화 2단계] 쿼리 확장 (Query Expansion) + 하이브리드 검색 (동기식 수정)
     """
     if not query:
         return {"answer": "검색어를 입력해주세요."}
@@ -914,93 +914,120 @@ async def search_ai(query: str, db: Session = Depends(get_db)):
         return {"answer": "서버에 Google API 키가 설정되지 않았습니다."}
 
     try:
-        # --- 1단계: 벡터 검색 (의미 기반) ---
+        # --- [Step 0] AI 모델 준비 ---
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash", 
+            temperature=0, 
+            google_api_key=GOOGLE_API_KEY,
+            transport="rest"
+        )
+
+        # --- [Step 1] 쿼리 확장 (Query Expansion) ---
+        expansion_prompt = ChatPromptTemplate.from_template(
+            """사용자가 쇼핑몰에서 '{question}'(이)라고 검색했어.
+            이 의도를 만족시킬 수 있는 구체적인 상품 카테고리나 키워드 5개를 한국어로 나열해줘.
+            
+            규칙:
+            1. 쉼표(,)로만 구분해.
+            2. 설명 없이 단어만 출력해.
+            3. 예시: 입력 '컴퓨터' -> 출력 '노트북,데스크탑,모니터,마우스,키보드'
+            """
+        )
+        
+        expansion_chain = expansion_prompt | llm | StrOutputParser()
+        
+        # [수정] await 삭제 및 invoke 사용 (에러 해결 핵심)
+        expanded_keywords_str = expansion_chain.invoke({"question": query})
+        
+        # 콤마로 분리하고 공백 제거
+        keywords = [k.strip() for k in expanded_keywords_str.split(',')]
+        keywords.insert(0, query)
+        keywords = list(set(keywords))
+        logger.info(f"🔍 쿼리 확장 결과: {query} -> {keywords}")
+
+
+        # --- [Step 2] 벡터 검색 ---
         vector_docs = []
         vectorstore = get_vectorstore()
         if vectorstore:
-            retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-            vector_docs = retriever.invoke(query)
+            retriever = vectorstore.as_retriever(
+                search_type="similarity_score_threshold",
+                search_kwargs={"score_threshold": 0.25, "k": 5} 
+            )
+            try:
+                vector_docs = retriever.invoke(query)
+            except Exception:
+                vector_docs = []
         
-        # --- 2단계: 키워드 검색 (정확성 기반 - SQLite) ---
-        # 사용자의 질문을 공백으로 쪼개서 키워드로 활용 (단순화된 방식)
-        # 예: "4070 모니터" -> ["4070", "모니터"]
-        keywords = query.split()
+        
+        # --- [Step 3] 키워드 검색 ---
         keyword_deals = []
-        
         if keywords:
-            # 모든 키워드가 포함된 제목을 찾음 (AND 조건)
-            sql_query = db.query(HotDeal)
-            for word in keywords:
-                sql_query = sql_query.filter(HotDeal.title.like(f"%{word}%"))
-            
-            # 최신순 5개
-            keyword_deals = sql_query.order_by(desc(HotDeal.created_at)).limit(5).all()
+            conditions = [HotDeal.title.like(f"%{word}%") for word in keywords if len(word) > 1]
+            if conditions:
+                sql_query = db.query(HotDeal).filter(or_(*conditions))
+                keyword_deals = sql_query.order_by(desc(HotDeal.created_at)).limit(10).all()
 
-        # --- 3단계: 결과 병합 (Hybrid) 및 중복 제거 ---
-        # 벡터 결과와 키워드 결과를 하나의 리스트로 합칩니다.
-        combined_results = {} # 링크를 키(Key)로 사용하여 중복 제거
+
+        # --- [Step 4] 결과 병합 ---
+        combined_results = {} 
         
-        # 3-1. 벡터 결과 추가
         for doc in vector_docs:
             link = doc.metadata.get('link')
             if link:
                 combined_results[link] = {
                     "content": doc.page_content,
                     "link": link,
-                    "source": "AI추천"
+                    "title": doc.page_content.split(" - ")[0]
                 }
         
-        # 3-2. 키워드 결과 추가
         for deal in keyword_deals:
             if deal.link not in combined_results:
                 combined_results[deal.link] = {
                     "content": f"[{deal.source}] {deal.title} - 가격: {deal.price}",
                     "link": deal.link,
-                    "source": "키워드매칭"
+                    "title": f"[{deal.source}] {deal.title}"
                 }
         
-        # 최종 컨텍스트 생성 (리스트 변환)
         final_docs_content = [item["content"] for item in combined_results.values()]
         
         if not final_docs_content:
-            return {"answer": "관련된 핫딜을 찾지 못했어요 😿 (키워드나 AI나 둘 다 모른대요!)"}
+            return {
+                "answer": f"집사야, '{query}'랑 관련된 핫딜(예: {', '.join(keywords[:3])} 등)을 찾아봤는데 하나도 없다냥! 😿",
+                "sources": []
+            }
 
-        # --- 4단계: Gemini에게 답변 요청 ---
+        # --- [Step 5] 답변 생성 ---
         template = """너는 핫딜 정보를 분석해주는 똑똑한 고양이 '딜냥이'야.
-        아래는 사용자의 질문에 대해 검색된 핫딜 목록이야.
+        사용자가 '{question}'을(를) 찾고 있어.
+        아래는 내가 데이터베이스에서 '확장 검색({keywords})'으로 찾아온 핫딜 목록이야.
         
         [검색된 핫딜 목록]
         {context}
         
-        사용자 질문: {question}
-        
         답변 가이드라인:
-        1. **목록을 단순 나열하지 마.** (목록은 아래에 카드로 보여줄 거야)
-        2. 대신, 검색된 물건들 중에서 **가장 추천할만한 것 1~2개만 콕 집어서** 이유와 함께 소개해줘.
-        3. 가격이 터무니없이 싸다면(예: 라면이 1000원 이하), "가격 정보가 좀 이상하지만 링크를 확인해봐라냥"라고 언질을 줘.
-        4. 말투는 친절한 고양이 말투('~이다냥', '~했다냥')를 써줘.
-        5. 답변은 3~4문장으로 짧고 굵게 끝내줘.
+        1. **목록을 단순 나열하지 마.**
+        2. 사용자의 의도에 가장 적합한 **꿀딜 1~3개만 콕 집어서 추천**해줘.
+        3. 왜 추천하는지 이유를 짧게 덧붙여줘. (가격이 싸다, 인기 제품이다 등)
+        4. 가격이 터무니없이 싸거나 이상하면(예: 100원), "가격 정보가 좀 이상하지만 링크를 확인해봐라냥"라고 언질을 줘.
+        5. 말투는 친절한 고양이 말투('~이다냥', '~했다냥')를 써줘.
+        6. 답변은 3~4문장으로 짧고 굵게.
         """
         prompt = ChatPromptTemplate.from_template(template)
         
-        model = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash", 
-            temperature=0, 
-            google_api_key=GOOGLE_API_KEY,
-            transport="rest"
-        )
-        
         chain = (
-            {"context": lambda x: "\n".join(final_docs_content), "question": RunnablePassthrough()}
+            {"context": lambda x: "\n".join(final_docs_content), 
+             "question": RunnablePassthrough(),
+             "keywords": lambda x: ", ".join(keywords)}
             | prompt
-            | model
+            | llm
             | StrOutputParser()
         )
         
+        # [수정] 여기도 invoke 사용
         response = chain.invoke(query)
         
-        # 프론트엔드 표시용 소스 리스트
-        sources = [{"title": item["content"], "link": item["link"]} for item in combined_results.values()]
+        sources = [{"title": item["title"], "link": item["link"]} for item in list(combined_results.values())[:10]]
         
         return {
             "answer": response,
