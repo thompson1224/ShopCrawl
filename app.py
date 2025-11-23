@@ -17,6 +17,7 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
+from sqlalchemy import or_
 
 import uvicorn
 import asyncio
@@ -902,8 +903,10 @@ async def list_available_models():
 #AI 검색 API    
 # --- AI 검색 API (Gemini) ---
 @app.get("/api/search/ai")
-async def search_ai(query: str):
-    """Gemini 기반 핫딜 검색"""
+async def search_ai(query: str, db: Session = Depends(get_db)):
+    """
+    [RAG 고도화] 하이브리드 검색 (벡터 + 키워드)
+    """
     if not query:
         return {"answer": "검색어를 입력해주세요."}
     
@@ -911,20 +914,61 @@ async def search_ai(query: str):
         return {"answer": "서버에 Google API 키가 설정되지 않았습니다."}
 
     try:
+        # --- 1단계: 벡터 검색 (의미 기반) ---
+        vector_docs = []
         vectorstore = get_vectorstore()
-        if not vectorstore:
-            return {"answer": "벡터 DB 초기화 실패"}
-
-        # 1. 관련 문서 검색 (상위 5개)
-        retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-        docs = retriever.invoke(query)
+        if vectorstore:
+            retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+            vector_docs = retriever.invoke(query)
         
-        if not docs:
-            return {"answer": "관련된 핫딜을 찾지 못했어요 😿"}
+        # --- 2단계: 키워드 검색 (정확성 기반 - SQLite) ---
+        # 사용자의 질문을 공백으로 쪼개서 키워드로 활용 (단순화된 방식)
+        # 예: "4070 모니터" -> ["4070", "모니터"]
+        keywords = query.split()
+        keyword_deals = []
+        
+        if keywords:
+            # 모든 키워드가 포함된 제목을 찾음 (AND 조건)
+            sql_query = db.query(HotDeal)
+            for word in keywords:
+                sql_query = sql_query.filter(HotDeal.title.like(f"%{word}%"))
+            
+            # 최신순 5개
+            keyword_deals = sql_query.order_by(desc(HotDeal.created_at)).limit(5).all()
 
-        # 2. Gemini 프롬프트 설정
-        template = """너는 핫딜 정보를 찾아주는 친절한 고양이 '딜냥이'야.
-        아래의 검색된 핫딜 목록을 보고 사용자의 질문에 답변해줘.
+        # --- 3단계: 결과 병합 (Hybrid) 및 중복 제거 ---
+        # 벡터 결과와 키워드 결과를 하나의 리스트로 합칩니다.
+        combined_results = {} # 링크를 키(Key)로 사용하여 중복 제거
+        
+        # 3-1. 벡터 결과 추가
+        for doc in vector_docs:
+            link = doc.metadata.get('link')
+            if link:
+                combined_results[link] = {
+                    "content": doc.page_content,
+                    "link": link,
+                    "source": "AI추천"
+                }
+        
+        # 3-2. 키워드 결과 추가
+        for deal in keyword_deals:
+            if deal.link not in combined_results:
+                combined_results[deal.link] = {
+                    "content": f"[{deal.source}] {deal.title} - 가격: {deal.price}",
+                    "link": deal.link,
+                    "source": "키워드매칭"
+                }
+        
+        # 최종 컨텍스트 생성 (리스트 변환)
+        final_docs_content = [item["content"] for item in combined_results.values()]
+        
+        if not final_docs_content:
+            return {"answer": "관련된 핫딜을 찾지 못했어요 😿 (키워드나 AI나 둘 다 모른대요!)"}
+
+        # --- 4단계: Gemini에게 답변 요청 ---
+        template = """너는 핫딜 정보를 찾아주는 똑똑한 고양이 '딜냥이'야.
+        아래는 '하이브리드 검색 시스템'이 찾아낸 핫딜 목록이야.
+        이 정보를 바탕으로 사용자 질문에 핵심만 요약해서 답변해줘.
         
         [검색된 핫딜 목록]
         {context}
@@ -932,24 +976,22 @@ async def search_ai(query: str):
         사용자 질문: {question}
         
         답변 가이드라인:
-        1. 질문과 가장 관련 있는 상품을 추천해줘.
-        2. 상품명, 가격, 쇼핑몰(출처)를 꼭 언급해줘.
-        3. 만약 찾는 물건이 없다면 없다고 솔직하게 말해줘.
-        4. 답변 끝에는 '이다냥~' 처럼 고양이 말투를 써줘.
+        1. 질문한 물건과 **가장 정확한 모델**이 있다면 그걸 최우선으로 추천해.
+        2. 상품명, 가격, 쇼핑몰(출처)를 명확히 언급해.
+        3. 목록에 없는 내용은 지어내지 말고 없다고 말해.
+        4. 말투는 친절한 고양이 말투('~이다냥', '~했다냥')를 써줘.
         """
         prompt = ChatPromptTemplate.from_template(template)
         
-        # Gemini 1.5 Flash 모델 사용 (무료 티어)
         model = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",  # 현재 가장 안정적인 무료 모델
-            temperature=0,
+            model="gemini-2.0-flash", 
+            temperature=0, 
             google_api_key=GOOGLE_API_KEY,
-            transport="rest"  # <--- gRPC 대신 REST 사용
+            transport="rest"
         )
         
-        # 3. 체인 실행
         chain = (
-            {"context": lambda x: "\n".join([d.page_content for d in docs]), "question": RunnablePassthrough()}
+            {"context": lambda x: "\n".join(final_docs_content), "question": RunnablePassthrough()}
             | prompt
             | model
             | StrOutputParser()
@@ -957,8 +999,8 @@ async def search_ai(query: str):
         
         response = chain.invoke(query)
         
-        # 출처 링크도 함께 반환
-        sources = [{"title": d.page_content, "link": d.metadata['link']} for d in docs]
+        # 프론트엔드 표시용 소스 리스트
+        sources = [{"title": item["content"], "link": item["link"]} for item in combined_results.values()]
         
         return {
             "answer": response,
@@ -967,7 +1009,7 @@ async def search_ai(query: str):
         
     except Exception as e:
         logger.error(f"AI 검색 오류: {e}")
-        return {"answer": "죄송해요, 츄르를 먹느라 답변을 못했어요 😿 (오류 발생)"}  
+        return {"answer": f"죄송해요, 츄르를 먹느라 답변을 못했어요 😿 ({str(e)})"}
 
 # 현재 유저 정보 조회
 @app.get('/api/auth/me')
