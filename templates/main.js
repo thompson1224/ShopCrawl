@@ -239,7 +239,15 @@ async function performAiSearch() {
         answerBox.classList.remove('hidden');
 
         // 답변 출력 (줄바꿈 처리)
-        answerText.innerHTML = data.answer.replace(/\n/g, '<br>');
+        let formattedAnswer = data.answer
+            // 1. **굵게** -> <strong>굵게</strong>
+            .replace(/\*\*(.*?)\*\*/g, '<strong class="text-purple-600">$1</strong>')
+            // 2. * 목록 -> 깔끔한 점으로 변환
+            .replace(/^\* /gm, '• ')
+            // 3. 줄바꿈 -> <br>
+            .replace(/\n/g, '<br>');
+
+        answerText.innerHTML = formattedAnswer;
 
         // 추천 상품이 있다면 표시
         if (data.sources && data.sources.length > 0) {
