@@ -249,12 +249,22 @@ async function performAiSearch() {
 
         answerText.innerHTML = formattedAnswer;
 
-        // 추천 상품이 있다면 표시
+        // 추천 상품 섹션 처리
+        const sourceSection = document.getElementById('aiSourceSection');
+        const sourceList = document.getElementById('aiSourceList');
+        const sourceCount = document.getElementById('aiSourceCount');
+        const toggleIcon = document.getElementById('aiToggleIcon');
+
+        // 기존 리스트 초기화
+        sourceList.innerHTML = '';
+
         if (data.sources && data.sources.length > 0) {
-            sourceList.classList.remove('hidden');
-            
+            sourceSection.classList.remove('hidden'); // 섹션 보이기
+            sourceList.classList.remove('hidden');    // 리스트 펼치기 (기본값)
+            toggleIcon.classList.remove('rotate-180'); // 아이콘 초기화
+            sourceCount.textContent = data.sources.length; // 개수 표시
+
             data.sources.forEach(source => {
-                // 심플한 미니 카드 생성
                 const card = document.createElement('a');
                 card.href = source.link;
                 card.target = '_blank';
@@ -271,6 +281,8 @@ async function performAiSearch() {
                 `;
                 sourceList.appendChild(card);
             });
+        } else {
+            sourceSection.classList.add('hidden'); // 없으면 섹션 통째로 숨김
         }
 
     } catch (error) {
@@ -278,5 +290,21 @@ async function performAiSearch() {
         loading.classList.add('hidden');
         answerBox.classList.remove('hidden');
         answerText.textContent = "지금 딜냥이가 너무 바빠서 대답할 수 없다냥... 😿 잠시 후에 다시 물어봐줘!";
+    }
+}
+
+// --- [추가] 리스트 토글 기능 ---
+function toggleAiSourceList() {
+    const list = document.getElementById('aiSourceList');
+    const icon = document.getElementById('aiToggleIcon');
+    
+    if (list.classList.contains('hidden')) {
+        // 펼치기
+        list.classList.remove('hidden');
+        icon.classList.remove('rotate-180');
+    } else {
+        // 접기
+        list.classList.add('hidden');
+        icon.classList.add('rotate-180');
     }
 }

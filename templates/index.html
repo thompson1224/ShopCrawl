@@ -245,9 +245,20 @@
                         </div>
                     </div>
 
-                    <div id="aiSourceList" class="hidden mt-4 space-y-2">
-                        <p class="text-xs font-bold text-gray-500 px-1">📎 관련 핫딜 바로가기</p>
-                        </div>
+                    <div id="aiSourceSection" class="hidden mt-4">
+                        <button onclick="toggleAiSourceList()" class="w-full flex justify-between items-center px-4 py-3 bg-purple-50 hover:bg-purple-100 rounded-xl transition-colors group">
+                            <span class="text-xs font-bold text-purple-700 flex items-center">
+                                📎 관련 핫딜 모아보기
+                                <span id="aiSourceCount" class="ml-2 bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full text-[10px]">0</span>
+                            </span>
+                            <svg id="aiToggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-400 transform transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                        </button>
+
+                        <div id="aiSourceList" class="mt-2 space-y-2 transition-all duration-300 origin-top">
+                            </div>
+                    </div>
                 </div>
             </div>
         </div>
