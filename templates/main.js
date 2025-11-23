@@ -240,11 +240,13 @@ async function performAiSearch() {
 
         // 답변 출력 (줄바꿈 처리)
         let formattedAnswer = data.answer
-            // 1. **굵게** -> <strong>굵게</strong>
-            .replace(/\*\*(.*?)\*\*/g, '<strong class="text-purple-600">$1</strong>')
-            // 2. * 목록 -> 깔끔한 점으로 변환
+            // 1. [텍스트](링크) -> <a href="링크">텍스트</a> 변환
+            .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="text-purple-600 font-bold underline hover:text-purple-800">$1 🔗</a>')
+            // 2. **굵게** -> <strong>
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            // 3. * 목록 -> 점
             .replace(/^\* /gm, '• ')
-            // 3. 줄바꿈 -> <br>
+            // 4. 줄바꿈
             .replace(/\n/g, '<br>');
 
         answerText.innerHTML = formattedAnswer;

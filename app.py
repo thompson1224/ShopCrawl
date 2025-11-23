@@ -952,7 +952,7 @@ async def search_ai(query: str, db: Session = Depends(get_db)):
         if vectorstore:
             retriever = vectorstore.as_retriever(
                 search_type="similarity_score_threshold",
-                search_kwargs={"score_threshold": 0.25, "k": 5} 
+                search_kwargs={"score_threshold": 0.35, "k": 5} 
             )
             try:
                 vector_docs = retriever.invoke(query)
@@ -972,19 +972,23 @@ async def search_ai(query: str, db: Session = Depends(get_db)):
         # --- [Step 4] 결과 병합 ---
         combined_results = {} 
         
+        # 4-1. 벡터 결과
         for doc in vector_docs:
             link = doc.metadata.get('link')
             if link:
                 combined_results[link] = {
-                    "content": doc.page_content,
+                    # (중요) 끝에 URL을 명시적
+                    "content": f"{doc.page_content} (링크: {link})", 
                     "link": link,
                     "title": doc.page_content.split(" - ")[0]
                 }
         
+        # 4-2. 키워드 결과
         for deal in keyword_deals:
             if deal.link not in combined_results:
                 combined_results[deal.link] = {
-                    "content": f"[{deal.source}] {deal.title} - 가격: {deal.price}",
+                    # (중요) 끝에 URL을 명시
+                    "content": f"[{deal.source}] {deal.title} - 가격: {deal.price} (링크: {deal.link})",
                     "link": deal.link,
                     "title": f"[{deal.source}] {deal.title}"
                 }
@@ -1000,18 +1004,17 @@ async def search_ai(query: str, db: Session = Depends(get_db)):
         # --- [Step 5] 답변 생성 ---
         template = """너는 핫딜 정보를 분석해주는 똑똑한 고양이 '딜냥이'야.
         사용자가 '{question}'을(를) 찾고 있어.
-        아래는 내가 데이터베이스에서 '확장 검색({keywords})'으로 찾아온 핫딜 목록이야.
         
         [검색된 핫딜 목록]
         {context}
         
         답변 가이드라인:
-        1. **목록을 단순 나열하지 마.**
-        2. 사용자의 의도에 가장 적합한 **꿀딜 1~3개만 콕 집어서 추천**해줘.
-        3. 왜 추천하는지 이유를 짧게 덧붙여줘. (가격이 싸다, 인기 제품이다 등)
-        4. 가격이 터무니없이 싸거나 이상하면(예: 100원), "가격 정보가 좀 이상하지만 링크를 확인해봐라냥"라고 언질을 줘.
+        1. 사용자의 의도에 가장 적합한 **꿀딜 1~3개만 콕 집어서 추천**해줘.
+        2. **(중요) 상품명을 말할 때는 반드시 링크를 걸어줘.** 형식: `[상품명](링크URL)` 
+           예시: `[농심 신라면 20봉](http://...)`
+        3. 추천 이유는 짧게 덧붙여줘.
+        4. 엉뚱한 물건(사용자 질문과 관련 없는 것)은 절대 추천하지 마.
         5. 말투는 친절한 고양이 말투('~이다냥', '~했다냥')를 써줘.
-        6. 답변은 3~4문장으로 짧고 굵게.
         """
         prompt = ChatPromptTemplate.from_template(template)
         
