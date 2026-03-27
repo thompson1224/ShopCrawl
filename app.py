@@ -155,49 +155,42 @@ async def scrape_ppomppu():
 async def scrape_ruliweb():
     logger.info("루리웹 크롤링 시작")
     deal_list = []
-    browser = None
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=['--disable-dev-shm-usage', '--no-sandbox'])
-            page = await browser.new_page()
-            await page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "stylesheet", "font"] else route.continue_())
-            await page.goto('https://bbs.ruliweb.com/market/board/1020', wait_until='domcontentloaded', timeout=15000)
-            
-            list_selector = 'table.board_list_table tbody tr.table_body'
-            await page.wait_for_selector(list_selector, timeout=10000)
-            posts = await page.query_selector_all(list_selector)
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept-Language': 'ko-KR,ko;q=0.9'}, follow_redirects=True) as client:
+            response = await client.get('https://bbs.ruliweb.com/market/board/1020', timeout=15.0)
+            response.raise_for_status()
 
-            for item in posts:
-                try:
-                    is_notice = await item.evaluate('(element) => element.classList.contains("notice")')
-                    if is_notice: continue
+        soup = BeautifulSoup(response.text, 'html.parser')
+        rows = soup.select('table.board_list_table tbody tr.table_body')
 
-                    title_tag = await item.query_selector('a.deco')
-                    if not title_tag: continue
-                    
-                    full_title = (await title_tag.inner_text()).strip()
-                    link = await title_tag.get_attribute('href')
-                    if link and link.startswith('/'): 
-                        link = 'https://bbs.ruliweb.com' + link
-                    
-                    author_tag = await item.query_selector('td.writer a')
-                    author = (await author_tag.inner_text()).strip() if author_tag else "작성자"
-
-                    thumbnail = ""
-                    price_match = re.search(r'(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)', full_title)
-                    price = price_match.group(1) if price_match else "가격 정보 없음"
-                    clean_title = re.sub(r'\[.*?\]|\s*\(\d+\)$|\s*\(?(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)\)?', '', full_title).strip()
-                    
-                    deal_list.append({'thumbnail': thumbnail, 'source': '루리웹', 'author': author, 'title': clean_title, 'price': price, 'shipping': '정보 없음', 'link': link})
-                except Exception: 
+        for row in rows:
+            try:
+                if 'notice' in row.get('class', []):
                     continue
-            
-            await browser.close()
+
+                title_tag = row.select_one('a.deco')
+                if not title_tag:
+                    continue
+
+                full_title = title_tag.get_text(strip=True)
+                link = title_tag.get('href', '')
+                if link.startswith('/'):
+                    link = 'https://bbs.ruliweb.com' + link
+
+                author_tag = row.select_one('td.writer a')
+                author = author_tag.get_text(strip=True) if author_tag else "작성자"
+
+                price_match = re.search(r'(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)', full_title)
+                price = price_match.group(1) if price_match else "가격 정보 없음"
+                clean_title = re.sub(r'\[.*?\]|\s*\(\d+\)$|\s*\(?(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)\)?', '', full_title).strip()
+
+                deal_list.append({'thumbnail': '', 'source': '루리웹', 'author': author, 'title': clean_title, 'price': price, 'shipping': '정보 없음', 'link': link})
+            except Exception:
+                continue
+
     except Exception as e:
         logger.error(f"루리웹 크롤링 오류: {e}")
-        if browser: 
-            await browser.close()
-    
+
     logger.info(f"루리웹 크롤링 완료: {len(deal_list)}개")
     return deal_list
 
@@ -387,151 +380,62 @@ async def scrape_quasarzone():
 async def scrape_eomisae():
     logger.info("어미새 크롤링 시작")
     deal_list = []
-    browser = None
-    
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True, 
-                args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled']
-            )
-            context = await browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            )
-            page = await context.new_page()
-            
-            # JavaScript 감지 우회
-            await page.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
-            
-            logger.info("어미새 페이지 로딩 중...")
-            await page.goto('https://eomisae.co.kr/fs', wait_until='networkidle', timeout=20000)
-            await page.wait_for_timeout(3000)
-            
-            # 페이지 HTML 확인
-            content = await page.content()
-            logger.info(f"어미새 페이지 로딩 완료, HTML 길이: {len(content)}")
-            
-            # 게시글 리스트 대기
+        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept-Language': 'ko-KR,ko;q=0.9'}, follow_redirects=True) as client:
+            response = await client.get('https://eomisae.co.kr/fs', timeout=20.0)
+            response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        items = soup.select('.card_el')
+
+        if not items:
+            logger.warning("어미새: .card_el 셀렉터 결과 없음")
+            return []
+
+        for idx, item in enumerate(items[:20]):
             try:
-                await page.wait_for_selector('article, .card_el, .list-item', timeout=5000)
-            except:
-                logger.warning("어미새: 게시글 셀렉터 대기 실패")
-            
-            # 여러 셀렉터 시도
-            posts = []
-            selectors = [
-                'article',
-                '.card_el',
-                'div[class*="card"]',
-                'li[class*="item"]',
-                '.list-item',
-                '[data-post]'
-            ]
-            
-            for selector in selectors:
-                posts = await page.query_selector_all(selector)
-                if posts:
-                    logger.info(f"어미새: '{selector}' 셀렉터로 {len(posts)}개 발견")
-                    break
-            
-            if not posts:
-                logger.warning("어미새: 게시글을 찾을 수 없음")
-                # HTML 일부 출력 (디버깅용)
-                logger.debug(f"어미새 HTML 샘플: {content[:500]}")
-                await browser.close()
-                return []
-            
-            for idx, item in enumerate(posts[:20]):  # 최대 20개만
-                try:
-                    # 모든 텍스트 추출
-                    text_content = await item.inner_text()
-                    
-                    # 링크 찾기
-                    link_tag = await item.query_selector('a')
-                    if not link_tag:
-                        continue
-                    
-                    link_href = await link_tag.get_attribute('href')
-                    if not link_href:
-                        continue
-                    
-                    if link_href.startswith('/'):
-                        link = 'https://eomisae.co.kr' + link_href
-                    elif link_href.startswith('http'):
-                        link = link_href
-                    else:
-                        link = 'https://eomisae.co.kr/' + link_href
-                    
-                    # 제목 추출 (여러 방법 시도)
-                    title = ""
-                    title_selectors = ['h3', 'h2', '.title', '[class*="title"]', 'a']
-                    for sel in title_selectors:
-                        title_tag = await item.query_selector(sel)
-                        if title_tag:
-                            title_text = await title_tag.inner_text()
-                            if title_text and len(title_text.strip()) > 3:
-                                title = title_text.strip()
-                                break
-                    
-                    if not title:
-                        # 텍스트에서 첫 줄 사용
-                        lines = text_content.strip().split('\n')
-                        title = lines[0][:100] if lines else f"어미새 핫딜 #{idx+1}"
-                    
-                    # 작성자
-                    author = "작성자"
-                    author_selectors = ['.user', '.author', 'span[class*="user"]', 'span[class*="author"]']
-                    for sel in author_selectors:
-                        author_tag = await item.query_selector(sel)
-                        if author_tag:
-                            author_text = await author_tag.inner_text()
-                            if author_text:
-                                author = author_text.strip()
-                                break
-                    
-                    # 썸네일
-                    thumbnail = ""
-                    img_tag = await item.query_selector('img')
-                    if img_tag:
-                        thumbnail_src = await img_tag.get_attribute('src')
-                        if thumbnail_src:
-                            if thumbnail_src.startswith('//'):
-                                thumbnail = 'https:' + thumbnail_src
-                            elif thumbnail_src.startswith('http'):
-                                thumbnail = thumbnail_src
-                            elif thumbnail_src.startswith('/'):
-                                thumbnail = 'https://eomisae.co.kr' + thumbnail_src
-                    
-                    # 가격 추출
-                    price_match = re.search(r'(\d{1,3}(?:,\d{3})*원)', title)
-                    price = price_match.group(1) if price_match else "가격 정보 없음"
-                    
-                    # 배송비
-                    shipping = "무료배송" if "무료" in title or "무배" in title else "정보 없음"
-                    
-                    deal_list.append({
-                        'thumbnail': thumbnail,
-                        'source': '어미새',
-                        'author': author,
-                        'title': title,
-                        'price': price,
-                        'shipping': shipping,
-                        'link': link
-                    })
-                    
-                    logger.debug(f"어미새 항목 {idx+1}: {title[:30]}...")
-                    
-                except Exception as e:
-                    logger.warning(f"어미새 항목 {idx+1} 파싱 오류: {e}")
+                link_tag = item.select_one('a')
+                if not link_tag:
                     continue
-            
-            await browser.close()
-            
+                link_href = link_tag.get('href', '')
+                if not link_href:
+                    continue
+                if link_href.startswith('/'):
+                    link = 'https://eomisae.co.kr' + link_href
+                elif link_href.startswith('http'):
+                    link = link_href
+                else:
+                    continue
+
+                title_tag = item.select_one('h3') or item.select_one('h2')
+                title = title_tag.get_text(strip=True) if title_tag else ""
+                if not title:
+                    continue
+
+                img_tag = item.select_one('img')
+                thumbnail = ""
+                if img_tag:
+                    src = img_tag.get('src', '')
+                    if src.startswith('//'):
+                        thumbnail = 'https:' + src
+                    elif src.startswith('http'):
+                        thumbnail = src
+                    elif src.startswith('/'):
+                        thumbnail = 'https://eomisae.co.kr' + src
+
+                price_match = re.search(r'(\d{1,3}(?:,\d{3})*원)', title)
+                price = price_match.group(1) if price_match else "가격 정보 없음"
+                shipping = "무료배송" if "무료" in title or "무배" in title else "정보 없음"
+
+                deal_list.append({'thumbnail': thumbnail, 'source': '어미새', 'author': '작성자', 'title': title, 'price': price, 'shipping': shipping, 'link': link})
+
+            except Exception as e:
+                logger.warning(f"어미새 항목 {idx+1} 파싱 오류: {e}")
+                continue
+
     except Exception as e:
-        logger.error(f"어미새 크롤링 전체 오류: {e}")
-        if browser:
-            await browser.close()
-    
+        logger.error(f"어미새 크롤링 오류: {e}")
+
     logger.info(f"어미새 크롤링 완료: {len(deal_list)}개")
     return deal_list
 
@@ -547,11 +451,11 @@ async def crawl_and_save_to_db():
     
     all_deals = []
     
-    # --- 1. 가벼운 httpx 작업 (병렬 실행) ---
+    # --- 1. httpx 작업 4개 병렬 실행 (뽐뿌, 퀘이사존, 루리웹, 어미새) ---
     logger.info("--- 1단계: httpx 크롤러 (병렬) 시작 ---")
-    httpx_tasks = [scrape_ppomppu(), scrape_quasarzone()]
+    httpx_tasks = [scrape_ppomppu(), scrape_quasarzone(), scrape_ruliweb(), scrape_eomisae()]
     results_httpx = await asyncio.gather(*httpx_tasks, return_exceptions=True)
-    
+
     for result in results_httpx:
         if isinstance(result, Exception):
             logger.error(f"httpx 크롤링 오류: {result}")
@@ -559,15 +463,14 @@ async def crawl_and_save_to_db():
             all_deals.extend(result)
     logger.info("--- 1단계: httpx 크롤러 완료 ---")
 
-    # --- 2. 무거운 Playwright 작업 (순차 실행) ---
-    playwright_scrapers = [scrape_ruliweb, scrape_zod, scrape_eomisae]
-    for scraper_func in playwright_scrapers:
-        try:
-            result_pw = await scraper_func() 
-            if result_pw:
-                all_deals.extend(result_pw)
-        except Exception as e:
-            logger.error(f"Playwright 작업 ({scraper_func.__name__}) 실행 중 오류 발생: {e}")
+    # --- 2. Playwright 작업 (Zod만) ---
+    logger.info("--- 2단계: Playwright 크롤러 (Zod) 시작 ---")
+    try:
+        result_zod = await scrape_zod()
+        if result_zod:
+            all_deals.extend(result_zod)
+    except Exception as e:
+        logger.error(f"Playwright 작업 (scrape_zod) 실행 중 오류 발생: {e}")
     logger.info("--- 2단계: Playwright 크롤러 완료 ---")
 
     # --- 3. DB 및 벡터 DB 저장 ---
