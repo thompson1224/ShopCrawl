@@ -1,0 +1,22 @@
+name: shopcrawl
+services:
+  - name: app
+    instance_type: nano
+    regions:
+      - fra # 프랑크푸르트 (무료 지역 중 하나)
+    ports:
+      - port: 8080
+        protocol: http
+    routes:
+      - path: /
+        port: 8080
+    env:
+      - key: APP_ENV
+        value: production
+      - key: PORT
+        value: "8080"
+      - key: BASE_URL
+        value: https://shopcrawl-yourname.koyeb.app # 나중에 본인 URL로 수정 필요
+      # 아래 보안 관련 키들은 Koyeb 대시보드에서 직접 입력하는 것을 권장합니다.
+      # - key: GOOGLE_API_KEY
+      #   value: "YOUR_KEY"
