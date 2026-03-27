@@ -25,7 +25,6 @@ import os
 import re
 import time
 import httpx
-from playwright.async_api import async_playwright
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
 from models import HotDeal, SessionLocal
