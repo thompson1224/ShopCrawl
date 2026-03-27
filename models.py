@@ -50,14 +50,15 @@ class HotDeal(Base):
         }
 
 # 데이터베이스 설정
-# current_dir = os.path.dirname(os.path.abspath(__file__))
-# db_path = os.path.join(current_dir, "hotdeals.db")
-db_path = "/data/hotdeals.db"  # <- 이 경로로 변경
+if os.getenv("APP_ENV") == "production":
+    db_path = "/data/hotdeals.db"
+else:
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(current_dir, "hotdeals.db")
+
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base.metadata.create_all(bind=engine)
-
-print(f"데이터베이스 생성됨: {db_path}")
