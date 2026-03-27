@@ -197,94 +197,65 @@ async def scrape_ruliweb():
 async def scrape_zod():
     logger.info("Zod 크롤링 시작")
     deal_list = []
-    browser = None
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-dev-shm-usage'])
-            context = await browser.new_context(
-                user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                locale='ko-KR',
-                timezone_id='Asia/Seoul',
-                extra_http_headers={
+        from curl_cffi.requests import AsyncSession
+        async with AsyncSession(impersonate='chrome120') as session:
+            response = await session.get(
+                'https://zod.kr/deal',
+                headers={
                     'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8',
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'sec-ch-ua': '"Chromium";v="120", "Google Chrome";v="120", "Not-A.Brand";v="99"',
-                    'sec-ch-ua-mobile': '?0',
-                    'sec-ch-ua-platform': '"macOS"',
-                }
+                },
+                timeout=15
             )
-            page = await context.new_page()
-            await page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["image", "stylesheet", "font"] else route.continue_())
+            response.raise_for_status()
 
-            await page.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => undefined });")
-            await page.goto('https://zod.kr/deal', wait_until='domcontentloaded', timeout=15000)
-            await page.wait_for_timeout(2000)
-            
+        soup = BeautifulSoup(response.text, 'html.parser')
+        posts = soup.select('ul.app-board-template-list li')
+
+        for item in posts:
             try:
-                await page.wait_for_selector('ul.app-board-template-list', state='attached', timeout=8000)
-            except: 
-                pass
-            
-            posts = await page.query_selector_all('ul.app-board-template-list li')
-            if not posts:
-                posts = await page.query_selector_all('li[class*="app-list"]')
-            
-            for item in posts:
-                try:
-                    text_content = await item.inner_text()
-                    if not text_content or '공지' in text_content[:10]: 
-                        continue
-                    
-                    link_tag = await item.query_selector('a[href*="/deal/"]')
-                    if not link_tag: 
-                        continue
-                    
-                    href = await link_tag.get_attribute('href')
-                    if not href or '/deal/' not in href: 
-                        continue
-                    link = 'https://zod.kr' + href if href.startswith('/') else href
-                    
-                    thumbnail = ""
-                    img = await item.query_selector('img')
-                    if img:
-                        thumbnail_src = await img.get_attribute('src')
-                        if thumbnail_src:
-                            if thumbnail_src.startswith('//'):
-                                thumbnail = 'https:' + thumbnail_src
-                            elif thumbnail_src.startswith('http'):
-                                thumbnail = thumbnail_src
-                    
-                    title = "제목 없음"
-                    title_span = await item.query_selector('span.app-list-title-item')
-                    if title_span:
-                        title = await title_span.inner_text()
-                        title = title.strip()
-                    
-                    price = "가격 정보 없음"
-                    strong_tags = await item.query_selector_all('strong')
-                    for strong in strong_tags:
-                        strong_text = await strong.inner_text()
-                        if '원' in strong_text or ',' in strong_text:
-                            price = strong_text.strip()
-                            break
-                    
-                    author = "작성자"
-                    member_div = await item.query_selector('div.app-list-member')
-                    if member_div:
-                        member_text = await member_div.inner_text()
-                        if member_text:
-                            author = member_text.strip().split('\n')[0]
-                    
-                    deal_list.append({'thumbnail': thumbnail, 'source': 'Zod', 'author': author, 'title': title, 'price': price, 'shipping': '정보 없음', 'link': link})
-                except Exception: 
+                text_content = item.get_text()
+                if not text_content or '공지' in text_content[:10]:
                     continue
-            
-            await browser.close()
+
+                link_tag = item.select_one('a[href*="/deal/"]')
+                if not link_tag:
+                    continue
+                href = link_tag.get('href', '')
+                if not href or '/deal/' not in href:
+                    continue
+                link = 'https://zod.kr' + href if href.startswith('/') else href
+
+                img = item.select_one('img')
+                thumbnail = ""
+                if img:
+                    src = img.get('src', '')
+                    if src.startswith('//'):
+                        thumbnail = 'https:' + src
+                    elif src.startswith('http'):
+                        thumbnail = src
+
+                title_span = item.select_one('span.app-list-title-item')
+                title = title_span.get_text(strip=True) if title_span else "제목 없음"
+
+                price = "가격 정보 없음"
+                for strong in item.select('strong'):
+                    t = strong.get_text(strip=True)
+                    if '원' in t or (',' in t and t.replace(',', '').isdigit()):
+                        price = t
+                        break
+
+                member_div = item.select_one('div.app-list-member')
+                author = member_div.get_text(strip=True).split('\n')[0] if member_div else "작성자"
+
+                deal_list.append({'thumbnail': thumbnail, 'source': 'Zod', 'author': author, 'title': title, 'price': price, 'shipping': '정보 없음', 'link': link})
+            except Exception:
+                continue
+
     except Exception as e:
         logger.error(f"Zod 크롤링 오류: {e}")
-        if browser: 
-            await browser.close()
-    
+
     logger.info(f"Zod 크롤링 완료: {len(deal_list)}개")
     return deal_list
 
@@ -462,27 +433,17 @@ async def crawl_and_save_to_db():
     
     all_deals = []
     
-    # --- 1. httpx 작업 4개 병렬 실행 (뽐뿌, 퀘이사존, 루리웹, 어미새) ---
-    logger.info("--- 1단계: httpx 크롤러 (병렬) 시작 ---")
-    httpx_tasks = [scrape_ppomppu(), scrape_quasarzone(), scrape_ruliweb(), scrape_eomisae()]
-    results_httpx = await asyncio.gather(*httpx_tasks, return_exceptions=True)
+    # --- 전체 5개 사이트 병렬 실행 ---
+    logger.info("--- 크롤러 5개 병렬 시작 ---")
+    tasks = [scrape_ppomppu(), scrape_quasarzone(), scrape_ruliweb(), scrape_eomisae(), scrape_zod()]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    for result in results_httpx:
+    for result in results:
         if isinstance(result, Exception):
-            logger.error(f"httpx 크롤링 오류: {result}")
+            logger.error(f"크롤링 오류: {result}")
         else:
             all_deals.extend(result)
-    logger.info("--- 1단계: httpx 크롤러 완료 ---")
-
-    # --- 2. Playwright 작업 (Zod만) ---
-    logger.info("--- 2단계: Playwright 크롤러 (Zod) 시작 ---")
-    try:
-        result_zod = await scrape_zod()
-        if result_zod:
-            all_deals.extend(result_zod)
-    except Exception as e:
-        logger.error(f"Playwright 작업 (scrape_zod) 실행 중 오류 발생: {e}")
-    logger.info("--- 2단계: Playwright 크롤러 완료 ---")
+    logger.info("--- 크롤러 5개 완료 ---")
 
     # --- 3. DB 및 벡터 DB 저장 ---
     if not all_deals:
