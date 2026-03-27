@@ -23,6 +23,7 @@ import uvicorn
 import asyncio
 import os
 import re
+import time
 import httpx
 from playwright.async_api import async_playwright
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -45,23 +46,20 @@ load_dotenv()
 
 #LLM 관련 키
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-CHROMA_DB_DIR = "/data/chroma_db" if os.getenv("FLY_APP_NAME") else "./chroma_db"
+IS_PRODUCTION = os.getenv("APP_ENV") == "production"
+CHROMA_DB_DIR = "/data/chroma_db" if IS_PRODUCTION else "./chroma_db"
 
-# Railway에서 제공하는 PORT 사용 (없으면 8000)
+# PORT 설정 (없으면 8000)
 PORT = int(os.getenv("PORT", 8000))
 
 # 네이버 로그인 콜백 URL
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
-APP_NAME = os.getenv("FLY_APP_NAME") 
-if APP_NAME:
-    # Fly.io 배포 환경
-    BASE_URL = f"https://{APP_NAME}.fly.dev"
-    NAVER_CALLBACK_URL = f"{BASE_URL}/api/auth/naver/callback"
+if IS_PRODUCTION:
+    BASE_URL = os.getenv("BASE_URL", "https://shopcrawl.example.com")
 else:
-    # 로컬 환경 (localhost:8000)
     BASE_URL = "http://localhost:8000"
-    NAVER_CALLBACK_URL = f"{BASE_URL}/api/auth/naver/callback"
+NAVER_CALLBACK_URL = f"{BASE_URL}/api/auth/naver/callback"
 
 # # 네이버 설정
 # NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
@@ -79,6 +77,10 @@ limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# /api/hotdeals 인메모리 캐시 (30초 TTL)
+_hotdeals_cache: dict = {}
+CACHE_TTL = 30
 
 # 정적 파일 마운트 (templates 폴더)
 try:
@@ -621,6 +623,8 @@ async def crawl_and_save_to_db():
 
         total_count = db.query(HotDeal).count()
         logger.info(f"✅ DB 저장 완료: 신규 {new_count}, 전체 {total_count}")
+        if new_count > 0:
+            _hotdeals_cache.clear()
         
     except Exception as e:
         logger.error(f"❌ DB 저장 오류: {e}")
@@ -630,7 +634,7 @@ async def crawl_and_save_to_db():
 
 def backup_database():
     """DB 백업 (Railway Volume 내부에 저장)"""
-    if os.getenv("shopcrawl"):
+    if IS_PRODUCTION:
         db_path = "/data/hotdeals.db"
         backup_dir = "/data/backups"
         
@@ -749,31 +753,38 @@ async def shutdown_event():
 # API 엔드포인트 (페이지네이션 추가)
 @app.get('/api/hotdeals')
 async def hotdeals(
-    source: str = "all", 
-    page: int = 1, 
+    source: str = "all",
+    page: int = 1,
     per_page: int = 20,
     db: Session = Depends(get_db)
 ):
+    cache_key = f"{source}:{page}:{per_page}"
+    now = time.time()
+    if cache_key in _hotdeals_cache:
+        ts, cached = _hotdeals_cache[cache_key]
+        if now - ts < CACHE_TTL:
+            return cached
+
     query = db.query(HotDeal)
-    
+
     if source != "all":
         query = query.filter(HotDeal.source == source)
-    
+
     # 전체 개수
     total = query.count()
-    
+
     # id 기준 내림차순 (가장 확실한 방법)
-    query = query.order_by(desc(HotDeal.created_at))    
+    query = query.order_by(desc(HotDeal.created_at))
     # 페이지네이션
     offset = (page - 1) * per_page
     deals = query.offset(offset).limit(per_page).all()
-    
+
     # 총 페이지 수
     total_pages = (total + per_page - 1) // per_page
-    
+
     logger.info(f"API 요청: {source}, 페이지 {page}/{total_pages} - {len(deals)}개 반환")
-    
-    return {
+
+    result = {
         "deals": [deal.to_dict() for deal in deals],
         "pagination": {
             "page": page,
@@ -782,6 +793,8 @@ async def hotdeals(
             "total_pages": total_pages
         }
     }
+    _hotdeals_cache[cache_key] = (now, result)
+    return result
 
 # 전체 통계 API (선택)
 @app.get('/api/stats')
