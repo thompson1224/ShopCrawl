@@ -32,6 +32,9 @@ from datetime import datetime, timedelta
 import logging
 import pytz
 import shutil
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import google.generativeai as genai
 
 
@@ -39,13 +42,6 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 load_dotenv()
 
-# 디버깅: 환경변수 확인
-print("=" * 50)
-print("🔍 환경변수 로드 확인:")
-print(f"SECRET_KEY: {os.getenv('SECRET_KEY', 'NOT_FOUND')[:20]}...")
-print(f"NAVER_CLIENT_ID: {os.getenv('NAVER_CLIENT_ID', 'NOT_FOUND')}")
-print(f"NAVER_CLIENT_SECRET: {os.getenv('NAVER_CLIENT_SECRET', 'NOT_FOUND')[:10]}...")
-print("=" * 50)
 
 #LLM 관련 키
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -79,7 +75,10 @@ else:
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # 정적 파일 마운트 (templates 폴더)
 try:
@@ -96,7 +95,13 @@ async def add_csp_header(request: Request, call_next):
     response.headers["Content-Security-Policy"] = ("default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self';")
     return response
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[BASE_URL],
+    allow_credentials=True,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
+)
 
 
 # 크롤링 함수들
@@ -638,7 +643,7 @@ def backup_database():
         try:
             shutil.copy2(db_path, backup_path)
             logger.info(f"✅ DB 백업 완료: {backup_path}")
-            
+
             # 오래된 백업 삭제 (최근 7개만 유지)
             backups = sorted(
                 [f for f in os.listdir(backup_dir) if f.startswith("hotdeals_backup_")],
@@ -648,9 +653,30 @@ def backup_database():
                 old_path = os.path.join(backup_dir, old_backup)
                 os.remove(old_path)
                 logger.info(f"🗑️ 오래된 백업 삭제: {old_backup}")
-                
+
         except Exception as e:
             logger.error(f"❌ DB 백업 실패: {e}")
+
+        # ChromaDB 백업
+        chroma_backup_path = f"{backup_dir}/chroma_backup_{timestamp}"
+        try:
+            if os.path.exists(CHROMA_DB_DIR):
+                if os.path.exists(chroma_backup_path):
+                    shutil.rmtree(chroma_backup_path)
+                shutil.copytree(CHROMA_DB_DIR, chroma_backup_path)
+                logger.info(f"✅ ChromaDB 백업 완료: {chroma_backup_path}")
+
+                # 오래된 ChromaDB 백업 삭제 (최근 7개만 유지)
+                chroma_backups = sorted(
+                    [f for f in os.listdir(backup_dir) if f.startswith("chroma_backup_")],
+                    reverse=True
+                )
+                for old_backup in chroma_backups[7:]:
+                    old_path = os.path.join(backup_dir, old_backup)
+                    shutil.rmtree(old_path)
+                    logger.info(f"🗑️ 오래된 ChromaDB 백업 삭제: {old_backup}")
+        except Exception as e:
+            logger.error(f"❌ ChromaDB 백업 실패: {e}")
     else:
         logger.info("⏭️ 로컬 환경: DB 백업 스킵")
 
@@ -903,7 +929,8 @@ async def list_available_models():
 #AI 검색 API    
 # --- AI 검색 API (Gemini) ---
 @app.get("/api/search/ai")
-async def search_ai(query: str, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def search_ai(request: Request, query: str, db: Session = Depends(get_db)):
     """
     [RAG 고도화 2단계] 쿼리 확장 (Query Expansion) + 하이브리드 검색 (동기식 수정)
     """
@@ -1054,38 +1081,13 @@ async def get_me(current_user: User = Depends(get_current_user_required)):
         "created_at": current_user.created_at.strftime('%Y-%m-%d')
     }
 
-@app.get('/api/auth/naver/callback')
-async def naver_callback(code: str, state: str, db: Session = Depends(get_db)):
-    """네이버 로그인 콜백 처리"""
-    
-    print(f"🔵 네이버 콜백 시작: code={code[:10]}...")
-    
-    # ... (토큰 발급 코드)
-    
-    print(f"✅ 네이버 액세스 토큰: {access_token[:20]}...")
-    
-    # ... (사용자 정보 가져오기)
-    
-    print(f"✅ 네이버 사용자 정보: {naver_user}")
-    
-    # ... (DB 저장)
-    
-    print(f"✅ 유저 생성/조회 완료: {user.username}")
-    
-    # JWT 토큰 생성
-    jwt_token = create_access_token(data={"sub": user.id})
-    print(f"✅ JWT 토큰 생성: {jwt_token[:30]}...")
-    
-    # 프론트엔드로 리다이렉트
-    frontend_url = f"http://localhost:8000/?token={jwt_token}"
-    
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url=frontend_url)
-
 # --- [관리자용] DB 강제 동기화 API ---
 @app.get("/api/admin/sync-rag")
-async def sync_rag_manually(db: Session = Depends(get_db)):
+async def sync_rag_manually(secret: str = "", db: Session = Depends(get_db)):
     """기존 DB의 데이터를 벡터 DB로 강제 이식"""
+    admin_secret = os.getenv("ADMIN_SECRET", "")
+    if not admin_secret or secret != admin_secret:
+        raise HTTPException(status_code=403, detail="인증 실패")
     if not GOOGLE_API_KEY:
         return {"status": "error", "message": "Google API Key 없음"}
     
@@ -1138,5 +1140,5 @@ async def read_root():
 if __name__ == '__main__':
     import sys
     port = int(os.getenv("PORT", 8000))
-    print(f"🚀 로컬 서버 시작: http://localhost:{port}")
+    logger.info(f"🚀 로컬 서버 시작: http://localhost:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
