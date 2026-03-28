@@ -154,38 +154,59 @@ async def scrape_ppomppu():
 async def scrape_ruliweb():
     logger.info("루리웹 크롤링 시작")
     deal_list = []
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'ko-KR,ko;q=0.9',
+    }
     try:
-        async with httpx.AsyncClient(headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept-Language': 'ko-KR,ko;q=0.9'}, follow_redirects=True) as client:
+        async with httpx.AsyncClient(headers=headers, follow_redirects=True) as client:
             response = await client.get('https://bbs.ruliweb.com/market/board/1020', timeout=15.0)
             response.raise_for_status()
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        rows = soup.select('table.board_list_table tbody tr.table_body')
+            soup = BeautifulSoup(response.text, 'html.parser')
+            rows = soup.select('table.board_list_table tbody tr.table_body')
 
-        for row in rows:
-            try:
-                if 'notice' in row.get('class', []):
+            for row in rows:
+                try:
+                    if 'notice' in row.get('class', []):
+                        continue
+
+                    title_tag = row.select_one('a.deco')
+                    if not title_tag:
+                        continue
+
+                    full_title = title_tag.get_text(strip=True)
+                    link = title_tag.get('href', '')
+                    if link.startswith('/'):
+                        link = 'https://bbs.ruliweb.com' + link
+
+                    author_tag = row.select_one('td.writer a')
+                    author = author_tag.get_text(strip=True) if author_tag else "작성자"
+
+                    price_match = re.search(r'(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)', full_title)
+                    price = price_match.group(1) if price_match else "가격 정보 없음"
+                    clean_title = re.sub(r'\[.*?\]|\s*\(\d+\)$|\s*\(?(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)\)?', '', full_title).strip()
+
+                    deal_list.append({'thumbnail': '', 'source': '루리웹', 'author': author, 'title': clean_title, 'price': price, 'shipping': '정보 없음', 'link': link})
+                except Exception:
                     continue
 
-                title_tag = row.select_one('a.deco')
-                if not title_tag:
-                    continue
+            # 개별 포스트에서 og:image 병렬 fetch (semaphore로 동시 5개 제한)
+            sem = asyncio.Semaphore(5)
 
-                full_title = title_tag.get_text(strip=True)
-                link = title_tag.get('href', '')
-                if link.startswith('/'):
-                    link = 'https://bbs.ruliweb.com' + link
+            async def fetch_og_image(url):
+                async with sem:
+                    try:
+                        r = await client.get(url, timeout=5.0)
+                        s = BeautifulSoup(r.text, 'html.parser')
+                        og = s.find('meta', property='og:image')
+                        return og.get('content', '') if og else ''
+                    except Exception:
+                        return ''
 
-                author_tag = row.select_one('td.writer a')
-                author = author_tag.get_text(strip=True) if author_tag else "작성자"
-
-                price_match = re.search(r'(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)', full_title)
-                price = price_match.group(1) if price_match else "가격 정보 없음"
-                clean_title = re.sub(r'\[.*?\]|\s*\(\d+\)$|\s*\(?(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)\)?', '', full_title).strip()
-
-                deal_list.append({'thumbnail': '', 'source': '루리웹', 'author': author, 'title': clean_title, 'price': price, 'shipping': '정보 없음', 'link': link})
-            except Exception:
-                continue
+            thumbnails = await asyncio.gather(*[fetch_og_image(d['link']) for d in deal_list])
+            for deal, thumb in zip(deal_list, thumbnails):
+                deal['thumbnail'] = thumb
 
     except Exception as e:
         logger.error(f"루리웹 크롤링 오류: {e}")
