@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>딜냥이 - 핫딜 정보 포털</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
@@ -157,6 +162,41 @@
     box-shadow: 0 20px 40px rgba(118, 75, 162, 0.15);
     border: 1px solid rgba(167, 139, 250, 0.5);
     }
+    
+    /* 다크 모드 스타일 */
+    .dark body {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    }
+    .dark .glass-morphism {
+        background: rgba(30, 30, 50, 0.95);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+    .dark .source-btn {
+        background: rgba(255, 255, 255, 0.9);
+        color: #1f2937;
+        border-color: #e5e7eb;
+    }
+    .dark .source-btn.active {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    .dark .text-gray-700 { color: #d1d5db; }
+    .dark .text-gray-500 { color: #9ca3af; }
+    .dark .text-gray-800 { color: #f3f4f6; }
+    .dark .border-gray-200 { border-color: #374151; }
+    .dark .bg-white { background-color: #1f2937; }
+    .dark .bg-purple-50 { background-color: #2e1065; }
+    .dark .bg-purple-100 { background-color: #3b1d6e; }
+    .dark .hover\:bg-purple-100:hover { background-color: #4c2d8a; }
+    .dark .placeholder-gray-400 { color: #6b7280; }
+    
+    /* 다크 모드 토글 버튼 */
+    .dark-toggle {
+        transition: all 0.3s ease;
+    }
+    .dark-toggle:hover {
+        transform: scale(1.1);
+    }
     </style>
 </head>
 <body class="p-6">
@@ -171,8 +211,18 @@
                     <p class="text-sm text-gray-500 mt-1">귀여운 냥이가 핫딜을 물어준다냥🐱</p>
                 </div>
                 
-                <div id="auth-section" class="w-full sm:w-auto">
-                    <!-- 로그인 전 -->
+                <div class="flex items-center space-x-3">
+                    <!-- 다크 모드 토글 -->
+                    <button id="darkModeToggle" onclick="toggleDarkMode()" class="dark-toggle p-2 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-yellow-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all">
+                        <svg id="sunIcon" class="w-6 h-6 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                        <svg id="moonIcon" class="w-6 h-6 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                        </svg>
+                    </button>
+                    
+                    <div id="auth-section" class="w-full sm:w-auto">
                     <button id="loginBtn" onclick="naverLogin()" class="naver-login-btn w-full sm:w-auto px-6 py-3 text-white font-semibold rounded-xl shadow-lg flex items-center justify-center sm:justify-start space-x-2">
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M16.273 12.845L7.376 0H0v24h7.726V11.156L16.624 24H24V0h-7.727v12.845z"/>
@@ -264,7 +314,7 @@
         </div>
 
         <!-- 소스 필터 -->
-        <div id="source-buttons" class="flex justify-center flex-wrap gap-2 mb-8">
+        <div id="source-buttons" class="flex justify-center flex-wrap gap-2 mb-4">
             <button data-source="all" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap active">
                 🔥 전체보기
             </button>
@@ -283,6 +333,43 @@
             <button data-source="퀘이사존" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
                 🖥️ 퀘이사존
             </button>
+        </div>
+
+        <!-- 필터 및 정렬 -->
+        <div class="glass-morphism rounded-2xl p-4 mb-8">
+            <div class="flex flex-wrap items-center gap-4">
+                <!-- 가격 범위 필터 -->
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">💰 가격:</span>
+                    <select id="priceRangeFilter" class="px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="all">전체</option>
+                        <option value="0-5만">0~5만원</option>
+                        <option value="5-10만">5~10만원</option>
+                        <option value="10-20만">10~20만원</option>
+                        <option value="20만+">20만원+</option>
+                    </select>
+                </div>
+                
+                <!-- 무료배송 필터 -->
+                <div class="flex items-center space-x-2">
+                    <input type="checkbox" id="shippingFreeFilter" class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                    <label for="shippingFreeFilter" class="text-sm font-medium text-gray-700 dark:text-gray-300">무료배송만</label>
+                </div>
+                
+                <!-- 정렬 -->
+                <div class="flex items-center space-x-2">
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">📅 정렬:</span>
+                    <select id="sortOrder" class="px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="latest">최신순</option>
+                        <option value="oldest">오래된순</option>
+                    </select>
+                </div>
+                
+                <!-- 초기화 버튼 -->
+                <button onclick="resetFilters()" class="ml-auto px-3 py-1.5 text-sm text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900 rounded-lg transition-colors">
+                    🔄 초기화
+                </button>
+            </div>
         </div>
         
         <!-- 핫딜 리스트 -->

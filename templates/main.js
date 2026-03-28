@@ -12,6 +12,28 @@ function sanitizeExternalUrl(value) {
     }
 }
 
+function toggleDarkMode() {
+    const html = document.documentElement;
+    const isDark = html.classList.contains('dark');
+    
+    if (isDark) {
+        html.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+    } else {
+        html.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+    }
+}
+
+function initDarkMode() {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    
+    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add('dark');
+    }
+}
+
 function createFallbackThumbnail() {
     const fallback = document.createElement('div');
     fallback.className = 'w-full h-full bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg flex items-center justify-center text-gray-400 text-xl';
@@ -66,6 +88,8 @@ function renderAiAnswer(container, answer) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    initDarkMode();
+    
     const hotdealList = document.getElementById('hotdeal-list');
     const sourceButtonsContainer = document.getElementById('source-buttons');
     const paginationContainer = document.getElementById('pagination');
@@ -73,14 +97,25 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentPage = 1;
     let currentSource = 'all';
     let totalPages = 1;
+    let currentPriceRange = 'all';
+    let currentShippingFree = false;
+    let currentSort = 'latest';
 
     const fetchHotDeals = async (source = 'all', page = 1) => {
         currentSource = source;
         currentPage = page;
         
-        hotdealList.innerHTML = `<div class="p-4 text-center text-gray-500 bg-white rounded-lg shadow"><span class="animate-pulse">딜냥이가 핫딜을 물어오는 중...</span></div>`;
+        hotdealList.innerHTML = `<div class="p-4 text-center text-gray-500 bg-white dark:bg-gray-800 rounded-lg shadow"><span class="animate-pulse">딜냥이가 핫딜을 물어오는 중...</span></div>`;
 
-        const backendUrl = `/api/hotdeals?source=${encodeURIComponent(source)}&page=${page}&per_page=20`;
+        const params = new URLSearchParams({
+            source: source,
+            page: page,
+            per_page: 20,
+            price_range: currentPriceRange,
+            shipping_free: currentShippingFree,
+            sort: currentSort
+        });
+        const backendUrl = `/api/hotdeals?${params.toString()}`;
 
         try {
             const response = await fetch(backendUrl);
@@ -294,6 +329,33 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchHotDeals(selectedSource, 1);
         }
     });
+
+    // 필터 이벤트 리스너
+    const priceRangeFilter = document.getElementById('priceRangeFilter');
+    const shippingFreeFilter = document.getElementById('shippingFreeFilter');
+    const sortOrder = document.getElementById('sortOrder');
+
+    const applyFilters = () => {
+        currentPriceRange = priceRangeFilter.value;
+        currentShippingFree = shippingFreeFilter.checked;
+        currentSort = sortOrder.value;
+        fetchHotDeals(currentSource, 1);
+    };
+
+    priceRangeFilter.addEventListener('change', applyFilters);
+    shippingFreeFilter.addEventListener('change', applyFilters);
+    sortOrder.addEventListener('change', applyFilters);
+
+    // 필터 초기화 함수
+    window.resetFilters = () => {
+        priceRangeFilter.value = 'all';
+        shippingFreeFilter.checked = false;
+        sortOrder.value = 'latest';
+        currentPriceRange = 'all';
+        currentShippingFree = false;
+        currentSort = 'latest';
+        fetchHotDeals(currentSource, 1);
+    };
 
     // 최초 로딩
     fetchHotDeals('all', 1);

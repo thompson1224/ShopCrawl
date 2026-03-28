@@ -4,6 +4,91 @@
 
 ---
 
+## 7. DB 최적화 (2026-03-29)
+
+### 7-1. DB 데이터 자동 정리 (30일)
+
+- `cleanup_old_deals()` 함수 구현
+- 매일 새벽 4시 KST에 30일 이상된 핫딜 자동 삭제
+- ChromaDB orphaned vectors 동기화 정리
+- 환경변수 `CLEANUP_DAYS=30`으로 보존 기간 설정 가능
+
+### 7-2. 복합 인덱스 추가
+
+```sql
+CREATE INDEX ix_hotdeals_source_created ON hotdeals(source, created_at);
+CREATE INDEX ix_hotdeals_created ON hotdeals(created_at);
+```
+
+- `models.py`의 `HotDeal` 클래스에 `__table_args__`로 인덱스 정의
+- 쿼리 성능 향상 (소스별 + 시간순 정렬)
+
+### 7-3. 루리웹 썸네일 캐싱
+
+- `RuliwebThumbnail` 테이블 추가 (link, thumbnail_url, fetched_at)
+- DB에 캐싱된 썸네일이 있으면 재사용, 없으면 fetch 후 저장
+- 네트워크 요청 수大幅 감소
+
+---
+
+## 8. 로깅 및 모니터링 개선 (2026-03-29)
+
+### 8-1. 구조화된 JSON 로깅
+
+- 모든 로그를 JSON 형태로 출력
+- Koyeb 로그 查看 용이
+- 필드: timestamp, level, logger, message
+
+### 8-2. 헬스체크 엔드포인트 분리
+
+| 엔드포인트 | 용도 |
+|-----------|------|
+| `/health` | 기본 헬스체크 |
+| `/health/db` | DB 연결 확인 |
+| `/health/vectorstore` | ChromaDB 연결 확인 + 문서 수 |
+
+---
+
+## 9. UX 개선 (2026-03-29)
+
+### 9-1. 다크 모드
+
+- Tailwind CSS dark mode (class based)
+- 헤더 우상단 토글 버튼 (🌙/☀️)
+- localStorage에 테마 저장
+- 시스템 설정 반영 (prefers-color-scheme)
+
+### 9-2. 핫딜 필터링/정렬
+
+**新增 필터:**
+- 가격 범위: 전체 / 0~5만원 / 5~10만원 / 10~20만원 / 20만원+
+- 무료배송: 체크박스
+- 정렬: 최신순 / 오래된순
+
+**API 변경:**
+```
+GET /api/hotdeals?source=all&page=1&price_range=all&shipping_free=false&sort=latest
+```
+
+---
+
+## 현재 상태 요약
+
+```
+메모리:     ~150MB (Playwright 제거 전 ~800MB)
+크롤링:     5개 사이트 완전 병렬 실행
+배포:       Koyeb (무료 플랜)
+DB:         SQLite + 30일 자동 정리
+인덱스:     복합 인덱스 (source + created_at)
+썸네일:     루리웹 캐싱 적용
+벡터 DB:    ChromaDB + Google Gemini 임베딩
+인증:       네이버 OAuth + 로컬 로그인 (HttpOnly 쿠키)
+UX:         다크 모드 + 필터링/정렬
+모니터링:    구조화된 로깅 + 헬스체크 분리
+```
+
+---
+
 ## 1. 보안 취약점 수정 (2026-03-27)
 
 **커밋:** `c905f8b`
@@ -121,6 +206,7 @@ DB:         SQLite (Koyeb 퍼시스턴트 볼륨)
 
 ## 미완료 / 보류 항목
 
-- [ ] DB 오래된 데이터 자동 정리 (7일 이상 삭제)
-- [ ] 루리웹 og:image fetch 재요청 스킵 최적화
-- [ ] DB 복합 인덱스 추가 (source + created_at)
+- [ ] PWA 지원 (Service Worker + Manifest)
+- [ ] 단위 테스트 작성
+- [ ] 키워드 알림 (Discord/Telegram 연동)
+- [ ] 검색어 저장 / 북마크 기능

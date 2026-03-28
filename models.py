@@ -1,4 +1,14 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Boolean, ForeignKey, Text
+from sqlalchemy import (
+    create_engine,
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Boolean,
+    ForeignKey,
+    Text,
+    Index,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -6,27 +16,31 @@ import pytz
 import os
 
 Base = declarative_base()
-KST = pytz.timezone('Asia/Seoul')
+KST = pytz.timezone("Asia/Seoul")
+
 
 class User(Base):
     __tablename__ = "users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, index=True)
     hashed_password = Column(String, default="")  # 소셜 로그인은 빈값
-    
+
     # 소셜 로그인 필드 추가
     provider = Column(String, default="local", index=True)  # "local", "naver", "kakao"
     provider_id = Column(String, index=True)  # 네이버 고유 ID
     profile_image = Column(String)  # 프로필 이미지 URL
-    
+
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(KST).replace(tzinfo=None))
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(KST).replace(tzinfo=None)
+    )
+
 
 class HotDeal(Base):
     __tablename__ = "hotdeals"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, index=True)
     source = Column(String, index=True)
@@ -35,8 +49,15 @@ class HotDeal(Base):
     shipping = Column(String)
     link = Column(String, unique=True, index=True)
     thumbnail = Column(String)
-    created_at = Column(DateTime, default=lambda: datetime.now(KST).replace(tzinfo=None), index=True)
-    
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(KST).replace(tzinfo=None), index=True
+    )
+
+    __table_args__ = (
+        Index("ix_hotdeals_source_created", "source", "created_at"),
+        Index("ix_hotdeals_created", "created_at"),
+    )
+
     def to_dict(self):
         return {
             "title": self.title,
@@ -46,8 +67,19 @@ class HotDeal(Base):
             "shipping": self.shipping,
             "link": self.link,
             "thumbnail": self.thumbnail,
-            "created_at": self.created_at.strftime('%Y-%m-%d %H:%M:%S')
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S"),
         }
+
+
+class RuliwebThumbnail(Base):
+    __tablename__ = "ruliweb_thumbnails"
+
+    link = Column(String, primary_key=True)
+    thumbnail_url = Column(String)
+    fetched_at = Column(
+        DateTime, default=lambda: datetime.now(KST).replace(tzinfo=None)
+    )
+
 
 # 데이터베이스 설정
 if os.getenv("APP_ENV") == "production":
@@ -58,7 +90,9 @@ else:
 
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base.metadata.create_all(bind=engine)
