@@ -1,3 +1,70 @@
+function sanitizeExternalUrl(value) {
+    if (!value) return '#';
+
+    try {
+        const parsed = new URL(value, window.location.origin);
+        if (!['http:', 'https:'].includes(parsed.protocol)) {
+            return '#';
+        }
+        return parsed.href;
+    } catch {
+        return '#';
+    }
+}
+
+function createFallbackThumbnail() {
+    const fallback = document.createElement('div');
+    fallback.className = 'w-full h-full bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg flex items-center justify-center text-gray-400 text-xl';
+    fallback.style.minHeight = '4rem';
+    fallback.textContent = '🖼️';
+    return fallback;
+}
+
+function appendInlineMarkdown(container, text) {
+    const pattern = /(\*\*(.+?)\*\*|\[(.+?)\]\((.+?)\))/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = pattern.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+            container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        }
+
+        if (match[2] !== undefined) {
+            const strong = document.createElement('strong');
+            strong.textContent = match[2];
+            container.appendChild(strong);
+        } else {
+            const link = document.createElement('a');
+            link.href = sanitizeExternalUrl(match[4]);
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.className = 'text-purple-600 font-bold underline hover:text-purple-800';
+            link.textContent = `${match[3]} 🔗`;
+            container.appendChild(link);
+        }
+
+        lastIndex = pattern.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+        container.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+}
+
+function renderAiAnswer(container, answer) {
+    container.replaceChildren();
+
+    String(answer || '').split('\n').forEach((line, index) => {
+        if (index > 0) {
+            container.appendChild(document.createElement('br'));
+        }
+
+        const normalizedLine = line.startsWith('* ') ? `• ${line.slice(2)}` : line;
+        appendInlineMarkdown(container, normalizedLine);
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     const hotdealList = document.getElementById('hotdeal-list');
     const sourceButtonsContainer = document.getElementById('source-buttons');
@@ -11,7 +78,6 @@ document.addEventListener('DOMContentLoaded', () => {
         currentSource = source;
         currentPage = page;
         
-        const sourceName = source === 'all' ? '전체' : source;
         hotdealList.innerHTML = `<div class="p-4 text-center text-gray-500 bg-white rounded-lg shadow"><span class="animate-pulse">딜냥이가 핫딜을 물어오는 중...</span></div>`;
 
         const backendUrl = `/api/hotdeals?source=${encodeURIComponent(source)}&page=${page}&per_page=20`;
@@ -48,45 +114,76 @@ document.addEventListener('DOMContentLoaded', () => {
                 const displayTitle = deal.title.length > 40 ? 
                     deal.title.substring(0, 40) + '...' : 
                     deal.title;
+                const safeLink = sanitizeExternalUrl(deal.link);
+                const safeThumbnail = sanitizeExternalUrl(deal.thumbnail);
 
                 const linkContainer = document.createElement('a');
-                linkContainer.href = deal.link;
+                linkContainer.href = safeLink;
                 linkContainer.target = '_blank';
+                linkContainer.rel = 'noopener noreferrer';
                 linkContainer.className = 'block glass-morphism p-4 rounded-xl shadow-lg deal-item-container';
 
-                // 모바일 최적화된 카드 레이아웃
-                linkContainer.innerHTML = `
-                    <div class="flex items-start space-x-3">
-                        <div class="flex-shrink-0 w-16 h-16">
-                            <img src="/image-proxy?url=${encodeURIComponent(deal.thumbnail)}&source=${encodeURIComponent(deal.source)}" 
-                                alt="${deal.title}" 
-                                class="w-full h-full object-cover rounded-lg border-2 border-gray-100 shadow-md"
-                                onerror="this.outerHTML='<div class=\\'w-full h-full bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg flex items-center justify-center text-gray-400\\' style=\\'min-height:4rem\\'><svg xmlns=\\'http://www.w3.org/2000/svg\\' class=\\'h-6 w-6\\' fill=\\'none\\' viewBox=\\'0 0 24 24\\' stroke=\\'currentColor\\'><path stroke-linecap=\\'round\\' stroke-linejoin=\\'round\\' stroke-width=\\'2\\' d=\\'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z\\' /></svg></div>'">
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center space-x-1.5 text-xs mb-1.5">
-                                <span class="font-bold px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full text-xs">
-                                    ${deal.source}
-                                </span>
-                                <span class="text-gray-500 truncate">
-                                    by ${deal.author}
-                                </span>
-                                <span class="text-gray-400">
-                                    • ${getTimeAgo(deal.created_at)}
-                                </span>
-                            </div>
-                            <h2 class="text-base font-bold text-gray-800 leading-tight line-clamp-2 mb-1">
-                                ${displayTitle}
-                            </h2>
-                            <div class="flex items-baseline space-x-2">
-                                <span class="text-lg font-bold bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent">
-                                    ${deal.price || '가격 정보 없음'}
-                                </span>
-                                ${deal.shipping ? `<span class="text-xs text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded"> ${deal.shipping} </span>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
+                const wrapper = document.createElement('div');
+                wrapper.className = 'flex items-start space-x-3';
+
+                const thumbnailWrapper = document.createElement('div');
+                thumbnailWrapper.className = 'flex-shrink-0 w-16 h-16';
+
+                if (safeThumbnail !== '#') {
+                    const image = document.createElement('img');
+                    image.src = `/image-proxy?url=${encodeURIComponent(safeThumbnail)}&source=${encodeURIComponent(deal.source)}`;
+                    image.alt = deal.title || '핫딜 이미지';
+                    image.className = 'w-full h-full object-cover rounded-lg border-2 border-gray-100 shadow-md';
+                    image.onerror = () => {
+                        image.replaceWith(createFallbackThumbnail());
+                    };
+                    thumbnailWrapper.appendChild(image);
+                } else {
+                    thumbnailWrapper.appendChild(createFallbackThumbnail());
+                }
+
+                const content = document.createElement('div');
+                content.className = 'flex-1 min-w-0';
+
+                const metaRow = document.createElement('div');
+                metaRow.className = 'flex items-center space-x-1.5 text-xs mb-1.5';
+
+                const sourceBadge = document.createElement('span');
+                sourceBadge.className = 'font-bold px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full text-xs';
+                sourceBadge.textContent = deal.source;
+
+                const authorText = document.createElement('span');
+                authorText.className = 'text-gray-500 truncate';
+                authorText.textContent = `by ${deal.author}`;
+
+                const timeText = document.createElement('span');
+                timeText.className = 'text-gray-400';
+                timeText.textContent = `• ${getTimeAgo(deal.created_at)}`;
+
+                metaRow.append(sourceBadge, authorText, timeText);
+
+                const title = document.createElement('h2');
+                title.className = 'text-base font-bold text-gray-800 leading-tight line-clamp-2 mb-1';
+                title.textContent = displayTitle;
+
+                const priceRow = document.createElement('div');
+                priceRow.className = 'flex items-baseline space-x-2';
+
+                const price = document.createElement('span');
+                price.className = 'text-lg font-bold bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent';
+                price.textContent = deal.price || '가격 정보 없음';
+                priceRow.appendChild(price);
+
+                if (deal.shipping) {
+                    const shipping = document.createElement('span');
+                    shipping.className = 'text-xs text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded';
+                    shipping.textContent = deal.shipping;
+                    priceRow.appendChild(shipping);
+                }
+
+                content.append(metaRow, title, priceRow);
+                wrapper.append(thumbnailWrapper, content);
+                linkContainer.appendChild(wrapper);
 
                 // 탭 후 백그라운드 색상 제거
                 linkContainer.addEventListener('focus', () => {
@@ -239,17 +336,7 @@ async function performAiSearch() {
         answerBox.classList.remove('hidden');
 
         // 답변 출력 (줄바꿈 처리)
-        let formattedAnswer = data.answer
-            // 1. [텍스트](링크) -> <a href="링크">텍스트</a> 변환
-            .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" class="text-purple-600 font-bold underline hover:text-purple-800">$1 🔗</a>')
-            // 2. **굵게** -> <strong>
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            // 3. * 목록 -> 점
-            .replace(/^\* /gm, '• ')
-            // 4. 줄바꿈
-            .replace(/\n/g, '<br>');
-
-        answerText.innerHTML = formattedAnswer;
+        renderAiAnswer(answerText, data.answer);
 
         // 추천 상품 섹션 처리
         const sourceSection = document.getElementById('aiSourceSection');
@@ -268,19 +355,28 @@ async function performAiSearch() {
 
             data.sources.forEach(source => {
                 const card = document.createElement('a');
-                card.href = source.link;
+                card.href = sanitizeExternalUrl(source.link);
                 card.target = '_blank';
+                card.rel = 'noopener noreferrer';
                 card.className = 'block bg-white p-3 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-purple-200 transition-all flex items-center justify-between group';
-                
-                card.innerHTML = `
-                    <div class="flex items-center space-x-2 overflow-hidden">
-                        <span class="text-lg">🛍️</span>
-                        <span class="text-sm text-gray-700 truncate group-hover:text-purple-600 transition-colors">${source.title}</span>
-                    </div>
-                    <svg class="w-4 h-4 text-gray-300 group-hover:text-purple-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                    </svg>
-                `;
+
+                const left = document.createElement('div');
+                left.className = 'flex items-center space-x-2 overflow-hidden';
+
+                const icon = document.createElement('span');
+                icon.className = 'text-lg';
+                icon.textContent = '🛍️';
+
+                const title = document.createElement('span');
+                title.className = 'text-sm text-gray-700 truncate group-hover:text-purple-600 transition-colors';
+                title.textContent = source.title;
+
+                const arrow = document.createElement('span');
+                arrow.className = 'w-4 h-4 text-gray-300 group-hover:text-purple-500';
+                arrow.textContent = '›';
+
+                left.append(icon, title);
+                card.append(left, arrow);
                 sourceList.appendChild(card);
             });
         } else {

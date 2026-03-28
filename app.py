@@ -1,13 +1,13 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from starlette.responses import FileResponse, Response
+from starlette.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from sqlalchemy import desc
 from fastapi import FastAPI, Request, Depends, HTTPException
 from sqlalchemy.orm import Session
-from auth import create_access_token, get_current_user, get_current_user_required, get_db
+from auth import ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token, get_current_user, get_current_user_required, get_db
 from models import User
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -32,10 +32,13 @@ from datetime import datetime, timedelta
 import logging
 import pytz
 import shutil
+import secrets
+import hashlib
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import google.generativeai as genai
+from urllib.parse import urlparse
 
 
 # 환경변수 로드 (선택)
@@ -47,6 +50,7 @@ load_dotenv()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 IS_PRODUCTION = os.getenv("APP_ENV") == "production"
 CHROMA_DB_DIR = "/data/chroma_db" if IS_PRODUCTION else "./chroma_db"
+ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
 
 # PORT 설정 (없으면 8000)
 PORT = int(os.getenv("PORT", 8000))
@@ -59,6 +63,16 @@ if IS_PRODUCTION:
 else:
     BASE_URL = "http://localhost:8000"
 NAVER_CALLBACK_URL = f"{BASE_URL}/api/auth/naver/callback"
+COOKIE_MAX_AGE = ACCESS_TOKEN_EXPIRE_MINUTES * 60
+NAVER_STATE_COOKIE = "naver_oauth_state"
+ACCESS_TOKEN_COOKIE = "access_token"
+ALLOWED_IMAGE_HOST_SUFFIXES = {
+    "뽐뿌": {"ppomppu.co.kr"},
+    "루리웹": {"ruliweb.com"},
+    "Zod": {"zod.kr"},
+    "어미새": {"eomisae.co.kr"},
+    "퀘이사존": {"quasarzone.com"},
+}
 
 # # 네이버 설정
 # NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
@@ -101,8 +115,66 @@ app.add_middleware(
     allow_origins=[BASE_URL],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-Admin-Secret"],
 )
+
+
+def is_valid_admin_secret(candidate: str | None) -> bool:
+    return bool(ADMIN_SECRET) and bool(candidate) and secrets.compare_digest(candidate, ADMIN_SECRET)
+
+
+def require_admin_access(secret: str = "", x_admin_secret: str | None = None) -> None:
+    provided_secret = x_admin_secret or secret
+    if not is_valid_admin_secret(provided_secret):
+        raise HTTPException(status_code=403, detail="관리자 인증이 필요합니다")
+
+
+def is_allowed_image_url(raw_url: str, source: str) -> bool:
+    try:
+        parsed = urlparse(raw_url)
+    except Exception:
+        return False
+
+    if parsed.scheme not in {"http", "https"}:
+        return False
+
+    hostname = (parsed.hostname or "").lower()
+    if not hostname or parsed.username or parsed.password:
+        return False
+
+    if hostname in {"localhost", "127.0.0.1", "::1"}:
+        return False
+
+    allowed_suffixes = ALLOWED_IMAGE_HOST_SUFFIXES.get(source)
+    if not allowed_suffixes:
+        return False
+
+    return any(hostname == suffix or hostname.endswith(f".{suffix}") for suffix in allowed_suffixes)
+
+
+def make_rag_id(link: str) -> str:
+    return hashlib.sha256(link.encode("utf-8")).hexdigest()
+
+
+def make_rag_document(deal: dict) -> Document:
+    return Document(
+        page_content=f"[{deal['source']}] {deal['title']} - 가격: {deal['price']}",
+        metadata={
+            "link": deal["link"],
+            "source": deal["source"],
+            "price": deal["price"],
+            "rag_id": make_rag_id(deal["link"]),
+        },
+    )
+
+
+def upsert_rag_documents(vectorstore: Chroma, documents: list[Document]) -> None:
+    if not documents:
+        return
+
+    ids = [doc.metadata["rag_id"] for doc in documents]
+    vectorstore.delete(ids=ids)
+    vectorstore.add_documents(documents, ids=ids)
 
 
 # 가격 추출 헬퍼 (여러 형식 지원)
@@ -515,8 +587,8 @@ async def crawl_and_save_to_db():
     new_count = 0
     duplicate_count = 0
     
-    # RAG(벡터DB)에 추가할 문서 리스트
-    new_deals_for_rag = []
+    # RAG(벡터DB)에 추가/갱신할 문서 리스트
+    deals_for_rag = []
 
     try:
         for deal in all_deals:
@@ -524,23 +596,24 @@ async def crawl_and_save_to_db():
                 existing = db.query(HotDeal).filter(HotDeal.link == deal['link']).first()
                 
                 if existing:
+                    changed = (
+                        existing.title != deal['title']
+                        or existing.price != deal['price']
+                        or existing.shipping != deal['shipping']
+                        or existing.thumbnail != deal['thumbnail']
+                    )
                     existing.title = deal['title']
                     existing.price = deal['price']
                     existing.shipping = deal['shipping']
                     existing.thumbnail = deal['thumbnail']
                     duplicate_count += 1
+                    if changed:
+                        deals_for_rag.append(make_rag_document(deal))
                 else:
                     db_deal = HotDeal(**deal, created_at=datetime.now(KST).replace(tzinfo=None))
                     db.add(db_deal)
                     new_count += 1
-                    
-                    # [RAG] 신규 핫딜을 벡터 문서로 변환
-                    new_deals_for_rag.append(
-                        Document(
-                            page_content=f"[{deal['source']}] {deal['title']} - 가격: {deal['price']}",
-                            metadata={"link": deal['link'], "source": deal['source'], "price": deal['price']}
-                        )
-                    )
+                    deals_for_rag.append(make_rag_document(deal))
                 
                 db.flush()
             except Exception:
@@ -549,12 +622,12 @@ async def crawl_and_save_to_db():
         db.commit()
         
         # --- 4. 벡터 DB(Chroma)에 신규 데이터 추가 ---
-        if new_deals_for_rag and GOOGLE_API_KEY:
+        if deals_for_rag and GOOGLE_API_KEY:
             try:
                 vectorstore = get_vectorstore()
                 if vectorstore:
-                    vectorstore.add_documents(new_deals_for_rag)
-                    logger.info(f"🧠 RAG: 신규 핫딜 {len(new_deals_for_rag)}개를 Gemini 기억장치에 저장했습니다.")
+                    upsert_rag_documents(vectorstore, deals_for_rag)
+                    logger.info(f"🧠 RAG: 핫딜 {len(deals_for_rag)}개를 Gemini 기억장치에 동기화했습니다.")
             except Exception as rag_error:
                 logger.error(f"🧠 RAG 저장 실패: {rag_error}")
 
@@ -691,8 +764,8 @@ async def shutdown_event():
 @app.get('/api/hotdeals')
 async def hotdeals(
     source: str = "all",
-    page: int = 1,
-    per_page: int = 20,
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     cache_key = f"{source}:{page}:{per_page}"
@@ -754,7 +827,13 @@ async def stats(db: Session = Depends(get_db)):
 
 # 수동 크롤링 API (테스트용)
 @app.post('/api/crawl-now')
-async def manual_crawl():
+@limiter.limit("2/minute")
+async def manual_crawl(
+    request: Request,
+    secret: str = "",
+    x_admin_secret: str | None = Header(default=None, alias="X-Admin-Secret")
+):
+    require_admin_access(secret=secret, x_admin_secret=x_admin_secret)
     logger.info("수동 크롤링 요청")
     await crawl_and_save_to_db()
     return {"status": "크롤링 완료"}
@@ -762,14 +841,21 @@ async def manual_crawl():
 # 이미지 프록시
 @app.get("/image-proxy")
 async def image_proxy(url: str, source: str = "뽐뿌"):
+    if not is_allowed_image_url(url, source):
+        raise HTTPException(status_code=400, detail="허용되지 않은 이미지 URL입니다")
+
     referer_map = { "뽐뿌": "https://www.ppomppu.co.kr/", "루리웹": "https://bbs.ruliweb.com/", "Zod": "https://zod.kr/", "어미새": "https://eomisae.co.kr/", "퀘이사존": "https://quasarzone.com/"}
     headers = { 'Referer': referer_map.get(source, "https://www.google.com/"), 'User-Agent': 'Mozilla/5.0' }
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(url, headers=headers, timeout=10.0)
+            response = await client.get(url, headers=headers, timeout=10.0, follow_redirects=False)
             response.raise_for_status()
             media_type = response.headers.get('content-type', 'image/jpeg')
+            if not media_type.startswith("image/"):
+                raise HTTPException(status_code=415, detail="이미지 응답만 허용됩니다")
             return Response(content=response.content, media_type=media_type)
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"이미지 프록시 오류: {e}")
             return Response(status_code=404)
@@ -778,7 +864,6 @@ async def image_proxy(url: str, source: str = "뽐뿌"):
 @app.get('/api/auth/naver/login')
 async def naver_login():
     """네이버 로그인 페이지로 리다이렉트"""
-    import secrets
     state = secrets.token_urlsafe(16)
     
     naver_auth_url = (
@@ -789,12 +874,24 @@ async def naver_login():
         f"&state={state}"
     )
     
-    return {"url": naver_auth_url}
+    response = JSONResponse({"url": naver_auth_url})
+    response.set_cookie(
+        key=NAVER_STATE_COOKIE,
+        value=state,
+        httponly=True,
+        secure=IS_PRODUCTION,
+        samesite="lax",
+        max_age=600,
+    )
+    return response
 
 # 네이버 로그인 콜백
 @app.get('/api/auth/naver/callback')
-async def naver_callback(code: str, state: str, db: Session = Depends(get_db)):
+async def naver_callback(request: Request, code: str, state: str, db: Session = Depends(get_db)):
     """네이버 로그인 콜백 처리"""
+    saved_state = request.cookies.get(NAVER_STATE_COOKIE)
+    if not saved_state or not secrets.compare_digest(state, saved_state):
+        raise HTTPException(status_code=400, detail="잘못된 로그인 요청입니다")
     
     # 1. 액세스 토큰 발급
     token_url = "https://nid.naver.com/oauth2.0/token"
@@ -855,14 +952,32 @@ async def naver_callback(code: str, state: str, db: Session = Depends(get_db)):
         jwt_token = create_access_token(data={"sub": user.id})
         
         # 5. 프론트엔드로 리다이렉트 (토큰 전달)
-        frontend_url = f"{BASE_URL}/?token={jwt_token}"
-        
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=frontend_url)
+        response = RedirectResponse(url=f"{BASE_URL}/")
+        response.delete_cookie(NAVER_STATE_COOKIE, samesite="lax")
+        response.set_cookie(
+            key=ACCESS_TOKEN_COOKIE,
+            value=jwt_token,
+            httponly=True,
+            secure=IS_PRODUCTION,
+            samesite="lax",
+            max_age=COOKIE_MAX_AGE,
+        )
+        return response
+
+
+@app.post('/api/auth/logout')
+async def logout():
+    response = JSONResponse({"status": "logged_out"})
+    response.delete_cookie(ACCESS_TOKEN_COOKIE, samesite="lax")
+    return response
 
 # --- [디버깅용] 사용 가능한 Gemini 모델 리스트 확인 ---
 @app.get("/api/debug/models")
-async def list_available_models():
+async def list_available_models(
+    secret: str = "",
+    x_admin_secret: str | None = Header(default=None, alias="X-Admin-Secret")
+):
+    require_admin_access(secret=secret, x_admin_secret=x_admin_secret)
     if not GOOGLE_API_KEY:
         return {"error": "API Key 없음"}
     
@@ -874,7 +989,8 @@ async def list_available_models():
                 models.append(m.name)
         return {"available_models": models}
     except Exception as e:
-        return {"error": str(e)}
+        logger.error(f"모델 목록 조회 오류: {e}")
+        return {"error": "모델 목록 조회 실패"}
 
 #AI 검색 API    
 # --- AI 검색 API (Gemini) ---
@@ -988,7 +1104,7 @@ async def search_ai(request: Request, query: str, db: Session = Depends(get_db))
         답변 가이드라인:
         1. 사용자의 의도에 가장 적합한 **꿀딜 1~3개만 콕 집어서 추천**해줘.
         2. **(중요) 상품명을 말할 때는 반드시 링크를 걸어줘.** 형식: `[상품명](링크URL)` 
-           예시: `[농심 신라면 20봉](http://...)`
+           예시: `[농심 신라면 20봉](http://...)
         3. 추천 이유는 짧게 덧붙여줘.
         4. 엉뚱한 물건(사용자 질문과 관련 없는 것)은 절대 추천하지 마.
         5. 말투는 친절한 고양이 말투('~이다냥', '~했다냥')를 써줘.
@@ -1016,7 +1132,7 @@ async def search_ai(request: Request, query: str, db: Session = Depends(get_db))
         
     except Exception as e:
         logger.error(f"AI 검색 오류: {e}")
-        return {"answer": f"죄송해요, 츄르를 먹느라 답변을 못했어요 😿 ({str(e)})"}
+        return {"answer": "죄송해요, 지금 검색이 꼬여서 답변을 못했어요 😿 잠시 후 다시 시도해줘!"}
 
 # 현재 유저 정보 조회
 @app.get('/api/auth/me')
@@ -1033,11 +1149,13 @@ async def get_me(current_user: User = Depends(get_current_user_required)):
 
 # --- [관리자용] DB 강제 동기화 API ---
 @app.get("/api/admin/sync-rag")
-async def sync_rag_manually(secret: str = "", db: Session = Depends(get_db)):
+async def sync_rag_manually(
+    secret: str = "",
+    x_admin_secret: str | None = Header(default=None, alias="X-Admin-Secret"),
+    db: Session = Depends(get_db)
+):
     """기존 DB의 데이터를 벡터 DB로 강제 이식"""
-    admin_secret = os.getenv("ADMIN_SECRET", "")
-    if not admin_secret or secret != admin_secret:
-        raise HTTPException(status_code=403, detail="인증 실패")
+    require_admin_access(secret=secret, x_admin_secret=x_admin_secret)
     if not GOOGLE_API_KEY:
         return {"status": "error", "message": "Google API Key 없음"}
     
@@ -1050,18 +1168,22 @@ async def sync_rag_manually(secret: str = "", db: Session = Depends(get_db)):
         # 2. 벡터 문서로 변환
         documents = []
         for deal in all_deals:
-            doc = Document(
-                page_content=f"[{deal.source}] {deal.title} - 가격: {deal.price}",
-                metadata={"link": deal.link, "source": deal.source, "price": deal.price}
+            documents.append(
+                make_rag_document(
+                    {
+                        "link": deal.link,
+                        "source": deal.source,
+                        "title": deal.title,
+                        "price": deal.price,
+                    }
+                )
             )
-            documents.append(doc)
             
         # 3. 벡터 DB에 저장
         vectorstore = get_vectorstore()
         if vectorstore:
-            # 기존 데이터가 있다면 중복 방지를 위해 초기화가 좋겠지만, 
-            # 일단 덮어쓰거나 추가하는 방식으로 진행 (Chroma는 ID 없으면 추가됨)
-            vectorstore.add_documents(documents)
+            vectorstore.reset_collection()
+            upsert_rag_documents(vectorstore, documents)
             
         return {"status": "success", "message": f"총 {len(documents)}개의 핫딜을 AI에게 학습시켰습니다!"}
         

@@ -310,57 +310,52 @@
         }
         
         // 로그아웃
-        function logout() {
+        async function logout() {
             if (confirm('로그아웃 하시겠습니까?')) {
-                localStorage.removeItem('token');
+                try {
+                    await fetch('/api/auth/logout', { method: 'POST' });
+                } catch (error) {
+                    console.error('로그아웃 실패:', error);
+                }
                 location.reload();
             }
         }
         
-        // 페이지 로드 시 토큰 확인
+        // 페이지 로드 시 로그인 상태 확인
         window.addEventListener('DOMContentLoaded', async () => {
             const urlParams = new URLSearchParams(window.location.search);
             const token = urlParams.get('token');
             
             if (token) {
-                localStorage.setItem('token', token);
                 window.history.replaceState({}, document.title, "/");
             }
-            
-            const savedToken = localStorage.getItem('token');
-            if (savedToken) {
-                try {
-                    const response = await fetch('/api/auth/me', {
-                        headers: { 'Authorization': `Bearer ${savedToken}` }
-                    });
+
+            try {
+                const response = await fetch('/api/auth/me');
+                
+                if (response.ok) {
+                    const user = await response.json();
                     
-                    if (response.ok) {
-                        const user = await response.json();
-                        
-                        document.getElementById('loginBtn').classList.add('hidden');
-                        document.getElementById('userInfo').classList.remove('hidden');
-                        document.getElementById('username').textContent = user.username;
-                        document.getElementById('userEmail').textContent = user.email;
-                        
-                        // 프로필 이미지 처리
-                        if (user.profile_image && user.profile_image.trim()) {
-                            document.getElementById('profileImg').src = user.profile_image;
-                            document.getElementById('profileImg').classList.remove('hidden');
-                            document.getElementById('profileInitial').style.display = 'none';
-                        } else {
-                            // 이름 첫 글자로 아바타 생성
-                            const initial = user.username.charAt(0).toUpperCase();
-                            document.getElementById('profileInitial').textContent = initial;
-                        }
-                        
-                        console.log('로그인 성공:', user);
+                    document.getElementById('loginBtn').classList.add('hidden');
+                    document.getElementById('userInfo').classList.remove('hidden');
+                    document.getElementById('username').textContent = user.username;
+                    document.getElementById('userEmail').textContent = user.email;
+                    
+                    // 프로필 이미지 처리
+                    if (user.profile_image && user.profile_image.trim()) {
+                        document.getElementById('profileImg').src = user.profile_image;
+                        document.getElementById('profileImg').classList.remove('hidden');
+                        document.getElementById('profileInitial').style.display = 'none';
                     } else {
-                        localStorage.removeItem('token');
+                        // 이름 첫 글자로 아바타 생성
+                        const initial = user.username.charAt(0).toUpperCase();
+                        document.getElementById('profileInitial').textContent = initial;
                     }
-                } catch (error) {
-                    console.error('유저 정보 로드 실패:', error);
-                    localStorage.removeItem('token');
+                    
+                    console.log('로그인 성공:', user);
                 }
+            } catch (error) {
+                console.error('유저 정보 로드 실패:', error);
             }
         });
     </script>

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from models import User, SessionLocal
@@ -55,14 +55,15 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ) -> Optional[User]:
     """현재 로그인한 유저 정보 가져오기"""
-    if not credentials:
+    token = credentials.credentials if credentials else request.cookies.get("access_token")
+    if not token:
         return None
-    
-    token = credentials.credentials
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id_str: str = payload.get("sub")
@@ -79,18 +80,19 @@ def get_current_user(
     return user
 
 def get_current_user_required(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db)
 ) -> User:
     """로그인 필수"""
-    if not credentials:
+    if not credentials and not request.cookies.get("access_token"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="로그인이 필요합니다",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    user = get_current_user(credentials, db)
+
+    user = get_current_user(request, credentials, db)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
