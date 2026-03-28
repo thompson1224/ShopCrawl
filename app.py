@@ -238,17 +238,29 @@ async def scrape_zod():
                 title_span = item.select_one('span.app-list-title-item')
                 title = title_span.get_text(strip=True) if title_span else "제목 없음"
 
+                # 가격/배송비: dl.zod-board--deal-meta > dd 순회
                 price = "가격 정보 없음"
-                for strong in item.select('strong'):
-                    t = strong.get_text(strip=True)
-                    if '원' in t or (',' in t and t.replace(',', '').isdigit()):
-                        price = t
-                        break
+                shipping = "정보 없음"
+                for dd in item.select('dl.zod-board--deal-meta dd'):
+                    dd_text = dd.get_text(strip=True)
+                    strong = dd.select_one('strong')
+                    if not strong:
+                        continue
+                    val = strong.get_text(strip=True)
+                    if '가격:' in dd_text:
+                        price = val
+                    elif '배송비:' in dd_text:
+                        shipping = "무료배송" if "무료" in val else val
 
-                member_div = item.select_one('div.app-list-member')
-                author = member_div.get_text(strip=True).split('\n')[0] if member_div else "작성자"
+                member_div = item.select_one('dd.app-list-member')
+                author = "작성자"
+                if member_div:
+                    # img 태그 제거 후 텍스트만
+                    for img in member_div.find_all('img'):
+                        img.decompose()
+                    author = member_div.get_text(strip=True) or "작성자"
 
-                deal_list.append({'thumbnail': thumbnail, 'source': 'Zod', 'author': author, 'title': title, 'price': price, 'shipping': '정보 없음', 'link': link})
+                deal_list.append({'thumbnail': thumbnail, 'source': 'Zod', 'author': author, 'title': title, 'price': price, 'shipping': shipping, 'link': link})
             except Exception:
                 continue
 
@@ -328,12 +340,28 @@ async def scrape_quasarzone():
                 if nick_wrap:
                     author = nick_wrap.get_text(strip=True)
                 
-                # 가격 추출 (제목에서)
-                price_match = re.search(r'(\d{1,3}(?:,\d{3})*원)', title)
-                price = price_match.group(1) if price_match else "가격 정보 없음"
-                
+                # 가격: span.text-orange (￦ 59,000 (KRW) 형식)
+                price = "가격 정보 없음"
+                price_el = cont.select_one('span.text-orange')
+                if price_el:
+                    raw = price_el.get_text(strip=True)  # "￦ 59,000 (KRW)"
+                    price_match = re.search(r'[\d,]+', raw)
+                    if price_match:
+                        price = price_match.group(0) + '원'
+                else:
+                    price_match = re.search(r'(\d{1,3}(?:,\d{3})*원)', title)
+                    if price_match:
+                        price = price_match.group(1)
+
                 # 배송비
-                shipping = "무료배송" if "무료" in title or "무배" in title else "정보 없음"
+                shipping_el = cont.select_one('div.market-info-sub span:not(.category):not(.text-orange):not(.nick):not(.count):not(.date)')
+                shipping_text = shipping_el.get_text(strip=True) if shipping_el else ""
+                if "무료" in title + shipping_text or "무배" in title + shipping_text:
+                    shipping = "무료배송"
+                elif shipping_text and '배송' in shipping_text:
+                    shipping = shipping_text
+                else:
+                    shipping = "정보 없음"
                 
                 deal_list.append({
                     'thumbnail': thumbnail,
