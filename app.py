@@ -105,6 +105,22 @@ app.add_middleware(
 )
 
 
+# 가격 추출 헬퍼 (여러 형식 지원)
+def extract_price(text):
+    patterns = [
+        r'(\d{1,3}(?:,\d{3})*원(?:대)?)',    # 1,500원, 1,500원대
+        r'(₩\s*\d{1,3}(?:,\d{3})+)',          # ₩143,624 / ₩ 10,150
+        r'(\d+\.?\d*만\s*원(?:대)?)',           # 1.9만원, 5만원대
+        r'(\d{4,6}원)',                          # 5500원
+        r'(\d{1,3}(?:,\d{3})+)(?!\d|%)',       # 49,900 (원 없는 콤마 구분 숫자, % 제외)
+    ]
+    for pattern in patterns:
+        m = re.search(pattern, text)
+        if m:
+            return m.group(1)
+    return "가격 정보 없음"
+
+
 # 크롤링 함수들
 async def scrape_ppomppu():
     logger.info("뽐뿌 크롤링 시작")
@@ -183,8 +199,7 @@ async def scrape_ruliweb():
                     author_tag = row.select_one('td.writer a')
                     author = author_tag.get_text(strip=True) if author_tag else "작성자"
 
-                    price_match = re.search(r'(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)', full_title)
-                    price = price_match.group(1) if price_match else "가격 정보 없음"
+                    price = extract_price(full_title)
                     clean_title = re.sub(r'\[.*?\]|\s*\(\d+\)$|\s*\(?(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)\)?', '', full_title).strip()
 
                     deal_list.append({'thumbnail': '', 'source': '루리웹', 'author': author, 'title': clean_title, 'price': price, 'shipping': '정보 없음', 'link': link})
@@ -439,7 +454,7 @@ async def scrape_eomisae():
 
                 title_tag = item.select_one('h3') or item.select_one('h2')
                 title = title_tag.get_text(strip=True) if title_tag else ""
-                if not title:
+                if not title or title == 'list_adsense':
                     continue
 
                 img_tag = item.select_one('img')
@@ -453,8 +468,7 @@ async def scrape_eomisae():
                     elif src.startswith('/'):
                         thumbnail = 'https://eomisae.co.kr' + src
 
-                price_match = re.search(r'(\d{1,3}(?:,\d{3})*원)', title)
-                price = price_match.group(1) if price_match else "가격 정보 없음"
+                price = extract_price(title)
                 shipping = "무료배송" if "무료" in title or "무배" in title else "정보 없음"
 
                 deal_list.append({'thumbnail': thumbnail, 'source': '어미새', 'author': '작성자', 'title': title, 'price': price, 'shipping': shipping, 'link': link})
