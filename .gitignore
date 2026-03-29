@@ -2,11 +2,21 @@
 .env
 .env.local
 .env.*.local
+.env.production
+!.env.production.example
 
 # 데이터베이스
 *.db
 *.sqlite
 *.sqlite3
+
+# ChromaDB
+chroma_db/
+chroma_backup_*.tar.gz
+
+# 백업
+backups/
+data/
 
 # Python
 __pycache__/
@@ -21,3 +31,7 @@ ENV/
 .idea/
 *.swp
 *.swo
+
+# OS
+.DS_Store
+Thumbs.db

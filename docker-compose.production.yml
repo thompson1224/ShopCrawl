@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  shopcrawl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shopcrawl
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - shopcrawl_data:/data
+      - shopcrawl_chroma:/app/chroma_db
+    env_file:
+      - .env
+    environment:
+      - APP_ENV=production
+      - PORT=8000
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - NAVER_CLIENT_ID=${NAVER_CLIENT_ID}
+      - NAVER_CLIENT_SECRET=${NAVER_CLIENT_SECRET}
+      - ADMIN_SECRET=${ADMIN_SECRET}
+      - BASE_URL=${BASE_URL}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+        reservations:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  shopcrawl_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/shopcrawl/data
+  shopcrawl_chroma:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/shopcrawl/chroma_db
