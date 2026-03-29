@@ -296,10 +296,6 @@ class User(Base):
         DateTime, default=lambda: datetime.now(KST).replace(tzinfo=None)
     )
 
-    comments = relationship(
-        "Comment", back_populates="user", cascade="all, delete-orphan"
-    )
-
 
 class HotDeal(Base):
     __tablename__ = "hotdeals"
@@ -356,7 +352,6 @@ class Comment(Base):
     )
 
     deal = relationship("HotDeal", back_populates="comments")
-    user = relationship("User", back_populates="comments")
 
     def to_dict(self):
         return {
