@@ -100,12 +100,27 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentPriceRange = 'all';
     let currentShippingFree = false;
     let currentSort = 'latest';
+    let filtersExpanded = false;
+    
+    // 필터 접기/펼치기 (모바일)
+    window.toggleFilters = () => {
+        const content = document.getElementById('filterContent');
+        const icon = document.getElementById('filterToggleIcon');
+        filtersExpanded = !filtersExpanded;
+        if (filtersExpanded) {
+            content.classList.remove('hidden');
+            icon.classList.remove('rotate-180');
+        } else {
+            content.classList.add('hidden');
+            icon.classList.add('rotate-180');
+        }
+    };
 
     const fetchHotDeals = async (source = 'all', page = 1) => {
         currentSource = source;
         currentPage = page;
         
-        hotdealList.innerHTML = `<div class="p-4 text-center text-gray-500 bg-white dark:bg-gray-800 rounded-lg shadow"><span class="animate-pulse">딜냥이가 핫딜을 물어오는 중...</span></div>`;
+        hotdealList.innerHTML = `<div class="glass-morphism p-6 text-center rounded-xl shadow-lg"><div class="flex justify-center gap-1 mb-2"><span class="paw-print">🐾</span><span class="paw-print">🐾</span><span class="paw-print">🐾</span></div><p class="text-gray-500 text-sm">딜냥이가 핫딜을 물어오는 중...</p></div>`;
 
         const params = new URLSearchParams({
             source: source,
@@ -139,16 +154,12 @@ document.addEventListener('DOMContentLoaded', () => {
             hotdealList.innerHTML = '';
 
             if (deals.length === 0) {
-                hotdealList.innerHTML = '<div class="p-4 text-center text-gray-500 bg-white rounded-lg shadow">😿 딜냥이가 핫딜을 찾지 못했어요!</div>';
+                hotdealList.innerHTML = '<div class="p-6 text-center text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-xl shadow"><span class="text-3xl">😿</span><p class="mt-2 text-sm">딜냥이가 핫딜을 찾지 못했어요!</p></div>';
                 paginationContainer.innerHTML = '';
                 return;
             }
             
             deals.forEach(deal => {
-                // 모바일에서 제목 줄바꿈 개선
-                const displayTitle = deal.title.length > 40 ? 
-                    deal.title.substring(0, 40) + '...' : 
-                    deal.title;
                 const safeLink = sanitizeExternalUrl(deal.link);
                 const safeThumbnail = sanitizeExternalUrl(deal.thumbnail);
 
@@ -156,21 +167,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 linkContainer.href = safeLink;
                 linkContainer.target = '_blank';
                 linkContainer.rel = 'noopener noreferrer';
-                linkContainer.className = 'block glass-morphism p-4 rounded-xl shadow-lg deal-item-container';
+                linkContainer.className = 'block glass-morphism rounded-xl shadow-lg deal-item-container hotdeal-card';
 
                 const wrapper = document.createElement('div');
-                wrapper.className = 'flex items-start space-x-3';
+                wrapper.className = 'flex gap-3';
 
                 const thumbnailWrapper = document.createElement('div');
-                thumbnailWrapper.className = 'flex-shrink-0 w-16 h-16';
+                thumbnailWrapper.className = 'flex-shrink-0 hotdeal-thumb';
 
                 if (safeThumbnail !== '#') {
                     const image = document.createElement('img');
                     image.src = `/image-proxy?url=${encodeURIComponent(safeThumbnail)}&source=${encodeURIComponent(deal.source)}`;
                     image.alt = deal.title || '핫딜 이미지';
-                    image.className = 'w-full h-full object-cover rounded-lg border-2 border-gray-100 shadow-md';
+                    image.className = 'w-full h-full object-cover rounded-lg border-2 border-gray-100 dark:border-gray-700 shadow-sm';
                     image.onerror = () => {
-                        image.replaceWith(createFallbackThumbnail());
+                        const fallback = createFallbackThumbnail();
+                        fallback.className += ' rounded-lg';
+                        image.replaceWith(fallback);
                     };
                     thumbnailWrapper.appendChild(image);
                 } else {
@@ -178,52 +191,59 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 const content = document.createElement('div');
-                content.className = 'flex-1 min-w-0';
+                content.className = 'flex-1 min-w-0 flex flex-col justify-between';
+
+                const topSection = document.createElement('div');
 
                 const metaRow = document.createElement('div');
-                metaRow.className = 'flex items-center space-x-1.5 text-xs mb-1.5';
+                metaRow.className = 'flex items-center gap-1.5 text-[10px] sm:text-xs mb-1';
 
                 const sourceBadge = document.createElement('span');
-                sourceBadge.className = 'font-bold px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full text-xs';
+                sourceBadge.className = 'font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full';
                 sourceBadge.textContent = deal.source;
-
-                const authorText = document.createElement('span');
-                authorText.className = 'text-gray-500 truncate';
-                authorText.textContent = `by ${deal.author}`;
 
                 const timeText = document.createElement('span');
                 timeText.className = 'text-gray-400';
-                timeText.textContent = `• ${getTimeAgo(deal.created_at)}`;
+                timeText.textContent = getTimeAgo(deal.created_at);
 
-                metaRow.append(sourceBadge, authorText, timeText);
+                metaRow.append(sourceBadge, timeText);
 
                 const title = document.createElement('h2');
-                title.className = 'text-base font-bold text-gray-800 leading-tight line-clamp-2 mb-1';
-                title.textContent = displayTitle;
+                title.className = 'hotdeal-title font-bold text-gray-800 dark:text-gray-200 mb-1';
+                title.textContent = deal.title;
+
+                topSection.append(metaRow, title);
+                content.appendChild(topSection);
+
+                const bottomSection = document.createElement('div');
+                bottomSection.className = 'flex items-end justify-between gap-2 mt-1';
 
                 const priceRow = document.createElement('div');
-                priceRow.className = 'flex items-baseline space-x-2';
+                priceRow.className = 'flex flex-wrap items-baseline gap-1';
 
                 const price = document.createElement('span');
-                price.className = 'text-lg font-bold bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent';
-                price.textContent = deal.price || '가격 정보 없음';
+                price.className = 'hotdeal-price font-bold bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent';
+                price.textContent = deal.price || '가격 없음';
                 priceRow.appendChild(price);
 
                 if (deal.shipping) {
                     const shipping = document.createElement('span');
-                    shipping.className = 'text-xs text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded';
+                    shipping.className = 'text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded';
                     shipping.textContent = deal.shipping;
                     priceRow.appendChild(shipping);
                 }
 
-                content.append(metaRow, title, priceRow);
-                wrapper.append(thumbnailWrapper, content);
-                linkContainer.appendChild(wrapper);
+                bottomSection.appendChild(priceRow);
 
-                // 탭 후 백그라운드 색상 제거
-                linkContainer.addEventListener('focus', () => {
-                    linkContainer.classList.remove('bg-gray-50');
-                });
+                const arrow = document.createElement('span');
+                arrow.className = 'text-gray-300 text-lg';
+                arrow.textContent = '→';
+                bottomSection.appendChild(arrow);
+
+                content.appendChild(bottomSection);
+                wrapper.appendChild(thumbnailWrapper);
+                wrapper.appendChild(content);
+                linkContainer.appendChild(wrapper);
 
                 hotdealList.appendChild(linkContainer);
             });            
@@ -232,7 +252,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
         } catch (error) {
             console.error('핫딜 정보를 가져오는 중 오류 발생:', error);
-            hotdealList.innerHTML = `<div class="p-4 text-center text-red-500 bg-red-50 rounded-lg shadow">😾 딜냥이가 넘어졌어요! 잠시 후 다시 시도해주세요.</div>`;
+            hotdealList.innerHTML = `<div class="p-6 text-center text-red-500 bg-red-50 dark:bg-red-900/30 rounded-xl shadow"><span class="text-3xl">😾</span><p class="mt-2 text-sm">딜냥이가 넘어졌어요!<br>잠시 후 다시 시도해주세요.</p></div>`;
         }
     };
     
@@ -306,11 +326,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const createPageButton = (text, page, ariaLabel = null) => {
         const btn = document.createElement('button');
         btn.textContent = text;
-        btn.className = `px-2.5 py-1 rounded text-sm font-medium transition-colors ${
+        btn.className = `page-btn px-2 py-1.5 rounded-lg text-sm font-medium transition-colors ${
             ariaLabel === 'active' || text === currentPage
-                ? 'bg-blue-500 text-white shadow-md' 
-                : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
-        } min-w-8 text-center`;
+                ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-md' 
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+        }`;
         if (ariaLabel) btn.setAttribute('aria-label', ariaLabel);
         btn.onclick = () => fetchHotDeals(currentSource, page);
         return btn;

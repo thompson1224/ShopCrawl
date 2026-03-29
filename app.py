@@ -230,6 +230,38 @@ def extract_price(text):
     return "가격 정보 없음"
 
 
+def clean_deal_title(title: str) -> str:
+    """핫딜 제목에서 의미없는 텍스트 제거"""
+    if not title:
+        return ""
+
+    cleaned = title
+
+    patterns_to_remove = [
+        r"\[.*?\]",  # [사이트명], [분류] 등
+        r"\s*\([^)]*\)",  # (내용), (123원), (할인) 등 괄호 안 전체
+        r"\s*/\s*무료배송",  # /무료배송
+        r"\s*/\s*무배",  # /무배
+        r"\s*/\s*무료\s*",  # /무료 (뒤에 내용이 있는 경우)
+        r"\s*/\s*\d+원?",  # /3000원 같은运费비 표시
+        r"\s*\|\s*.*$",  # | 이후 모든 내용
+        r"\s*&\s*.*$",  # & 이후 모든 내용
+        r"\s*=\s*.*$",  # = 이후 모든 내용
+        r"\d{1,3}(?:,\d{3})*원\s*$",  # 끝에 있는 가격 (10,000원)
+        r"\d+만\s*원\s*$",  # 끝에 있는 만원 (5만원)
+        r"^\s*\d+\s*$",  # 숫자만 있는 경우
+        r"^\s*-\s*",  # 시작의 -
+    ]
+
+    for pattern in patterns_to_remove:
+        cleaned = re.sub(pattern, "", cleaned)
+
+    cleaned = re.sub(r"\s+", " ", cleaned)  # 여러 공백을 하나로
+    cleaned = re.sub(r"^[\s\-–—\.]+|[\s\-–—\.]+$", "", cleaned)  # 앞뒤 특수문자 제거
+
+    return cleaned.strip()
+
+
 # 크롤링 함수들
 async def scrape_ppomppu():
     logger.info("뽐뿌 크롤링 시작")
@@ -283,11 +315,7 @@ async def scrape_ppomppu():
                     if "무료" in full_title or "무배" in full_title
                     else "배송비 정보 없음"
                 )
-                clean_title = re.sub(
-                    r"\[.*?\]|(\d{1,3}(?:,\d{3})*원)|\s*\(?\d+\)?$|\s*/\s*무료배송|\s*/\s*무배",
-                    "",
-                    full_title,
-                ).strip()
+                clean_title = clean_deal_title(full_title)
                 deal_list.append(
                     {
                         "thumbnail": thumbnail,
@@ -341,11 +369,7 @@ async def scrape_ruliweb():
                     author = author_tag.get_text(strip=True) if author_tag else "작성자"
 
                     price = extract_price(full_title)
-                    clean_title = re.sub(
-                        r"\[.*?\]|\s*\(\d+\)$|\s*\(?(\d{1,3}(?:,\d{3})*원|\d+\.\d+\$)\)?",
-                        "",
-                        full_title,
-                    ).strip()
+                    clean_title = clean_deal_title(full_title)
 
                     deal_list.append(
                         {
@@ -517,7 +541,7 @@ async def scrape_zod():
                         "thumbnail": thumbnail,
                         "source": "Zod",
                         "author": author,
-                        "title": title,
+                        "title": clean_deal_title(title),
                         "price": price,
                         "shipping": shipping,
                         "link": link,
@@ -633,7 +657,7 @@ async def scrape_quasarzone():
                         "thumbnail": thumbnail,
                         "source": "퀘이사존",
                         "author": author,
-                        "title": title,
+                        "title": clean_deal_title(title),
                         "price": price,
                         "shipping": shipping,
                         "link": link,
@@ -716,7 +740,7 @@ async def scrape_eomisae():
                         "thumbnail": thumbnail,
                         "source": "어미새",
                         "author": "작성자",
-                        "title": title,
+                        "title": clean_deal_title(title),
                         "price": price,
                         "shipping": shipping,
                         "link": link,

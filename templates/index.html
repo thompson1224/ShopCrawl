@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>딜냥이 - 핫딜 정보 포털</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -13,29 +13,29 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-      <!-- Google tag (gtag.js) - Google Analytics -->
-      <script async src="https://www.googletagmanager.com/gtag/js?id=G-ZVW82PEW97"></script>
-      <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', 'G-ZVW82PEW97');
-      </script>
-
-    <script type="text/javascript">
-    (function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "t9c8of98a3");
-    </script>
     <style>
+        /* iOS safe area support */
+        html {
+            --sat: env(safe-area-inset-top);
+            --sar: env(safe-area-inset-right);
+            --sab: env(safe-area-inset-bottom);
+            --sal: env(safe-area-inset-left);
+        }
+        
         body { 
             font-family: 'Noto Sans KR', sans-serif; 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            min-height: 100dvh; /* Dynamic viewport height for iOS */
             margin: 0;
             padding: 0;
+            padding-top: max(0.75rem, env(safe-area-inset-top));
+            padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+            padding-left: max(0.75rem, env(safe-area-inset-left));
+            padding-right: max(0.75rem, env(safe-area-inset-right));
+            -webkit-tap-highlight-color: transparent;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
         }
         .source-btn.active { 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -44,12 +44,10 @@
             box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
         }
         .deal-item-container {
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow: hidden;
+            transition: all 0.2s ease;
         }
-        .deal-item-container:hover { 
-            transform: translateY(-8px); 
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        .deal-item-container:active { 
+            transform: scale(0.98);
         }
         .profile-dropdown {
             display: none;
@@ -73,8 +71,6 @@
         }
         .naver-login-btn:hover {
             background: #02B350;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(3, 199, 90, 0.3);
         }
         .glass-morphism {
             background: rgba(255, 255, 255, 0.95);
@@ -82,56 +78,69 @@
             border: 1px solid rgba(255, 255, 255, 0.3);
         }
         
-        /* 모바일 최적화 */
-        .source-btn {
-            padding: 0.6rem 1rem; /* 모바일 패딩 조정 */
-            font-size: 0.875rem;
+        /* 소스 버튼 가로 스크롤 */
+        .source-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            /* iOS 100vw fix */
+            width: 100vw;
+            margin-left: max(-0.75rem, calc(-1 * env(safe-area-inset-left)));
+            padding-left: max(0.75rem, env(safe-area-inset-left));
+            padding-right: max(0.75rem, env(safe-area-inset-right));
         }
-
-        /* 제목 줄 바꿈 개선 */
-        .deal-item-container h2 {
-            line-height: 1.3;
+        .source-scroll::-webkit-scrollbar {
+            display: none;
         }
         
-        /* 이미지 오버플로우 방지 */
-        .w-24.h-24 {
-            max-width: 4rem;
-            height: auto;
-        }
-
-        /* 모바일 가로 폭 조정 */
+        /* 모바일 최적화 */
         @media (max-width: 640px) {
+            body {
+                padding-top: max(0.5rem, env(safe-area-inset-top));
+                padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+                padding-left: max(0.5rem, env(safe-area-inset-left));
+                padding-right: max(0.5rem, env(safe-area-inset-right));
+            }
+            }
             .container {
-                width: 95%;
-                padding: 0.5rem;
+                width: 100%;
+                padding: 0;
             }
             .source-btn {
                 padding: 0.5rem 0.75rem;
-                font-size: 0.8rem;
+                font-size: 0.75rem;
                 white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .p-6 {
-                padding: 1rem;
+                flex-shrink: 0;
             }
             .text-3xl {
-                font-size: 1.6rem;
+                font-size: 1.5rem;
             }
-            .hotdeal-item {
-                flex-direction: column;
+            /* 핫딜 카드 모바일 최적화 */
+            .hotdeal-card {
+                padding: 0.75rem;
             }
-            .hotdeal-item .content-wrapper {
-                width: 100%;
-                margin-left: 0;
-                margin-top: 0.5rem;
+            .hotdeal-thumb {
+                width: 5rem;
+                height: 5rem;
+                flex-shrink: 0;
             }
-            .hotdeal-item .content-wrapper h2 {
+            .hotdeal-title {
+                font-size: 0.9rem;
+                line-height: 1.3;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            .hotdeal-price {
                 font-size: 1rem;
             }
-            .hotdeal-item .thumbnail {
-                width: 100%;
-                height: auto;
+            /* 페이지네이션 버튼 확대 */
+            .page-btn {
+                min-width: 2.5rem;
+                min-height: 2.5rem;
+                font-size: 0.875rem;
             }
         }
         
@@ -150,109 +159,127 @@
             50% { transform: translateY(-10px); }
         }
 
-        /* 이미지 오류 핸들링 */
-        .thumbnail-element, .placeholder-image {
-            object-fit: cover;
-            min-height: 4rem;
+        /* 다크 모드 스타일 */
+        .dark body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
         }
-        /* 검색창 포커스 시 부모 컨테이너 강조 효과 */
-    #ai-search-container:focus-within {
-    background: rgba(255, 255, 255, 0.9);
-    transform: translateY(-2px);
-    box-shadow: 0 20px 40px rgba(118, 75, 162, 0.15);
-    border: 1px solid rgba(167, 139, 250, 0.5);
-    }
-    
-    /* 다크 모드 스타일 */
-    .dark body {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    }
-    .dark .glass-morphism {
-        background: rgba(30, 30, 50, 0.95);
-        border-color: rgba(255, 255, 255, 0.1);
-    }
-    .dark .source-btn {
-        background: rgba(255, 255, 255, 0.9);
-        color: #1f2937;
-        border-color: #e5e7eb;
-    }
-    .dark .source-btn.active {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-    }
-    .dark .text-gray-700 { color: #d1d5db; }
-    .dark .text-gray-500 { color: #9ca3af; }
-    .dark .text-gray-800 { color: #f3f4f6; }
-    .dark .border-gray-200 { border-color: #374151; }
-    .dark .bg-white { background-color: #1f2937; }
-    .dark .bg-purple-50 { background-color: #2e1065; }
-    .dark .bg-purple-100 { background-color: #3b1d6e; }
-    .dark .hover\:bg-purple-100:hover { background-color: #4c2d8a; }
-    .dark .placeholder-gray-400 { color: #6b7280; }
-    
-    /* 다크 모드 토글 버튼 */
-    .dark-toggle {
-        transition: all 0.3s ease;
-    }
-    .dark-toggle:hover {
-        transform: scale(1.1);
-    }
+        .dark .glass-morphism {
+            background: rgba(30, 30, 50, 0.95);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        .dark .source-btn {
+            background: rgba(255, 255, 255, 0.9);
+            color: #1f2937;
+            border-color: #e5e7eb;
+        }
+        .dark .text-gray-700 { color: #d1d5db; }
+        .dark .text-gray-500 { color: #9ca3af; }
+        .dark .text-gray-800 { color: #f3f4f6; }
+        .dark .border-gray-200 { border-color: #374151; }
+        .dark .bg-white { background-color: #1f2937; }
+        .dark .bg-gray-50 { background-color: #1f2937; }
+        .dark .bg-gray-100 { background-color: #374151; }
+        .dark .bg-purple-50 { background-color: #2e1065; }
+        .dark .bg-purple-100 { background-color: #3b1d6e; }
+        
+        /* 다크 모드 토글 버튼 */
+        .dark-toggle {
+            transition: all 0.3s ease;
+        }
+        .dark-toggle:hover {
+            transform: scale(1.1);
+        }
+        
+        /* 필터 접기/펼치기 */
+        .filter-toggle {
+            transition: transform 0.2s ease;
+        }
+        .filter-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+        
+        /* 스와이프 힌트 */
+        .swipe-hint {
+            animation: swipe-hint 1.5s ease-in-out infinite;
+        }
+        @keyframes swipe-hint {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(-5px); }
+        }
+        
+        /* iOS Safari 100vw overflow fix */
+        @supports (padding: max(0px)) {
+            body {
+                padding-left: max(0.75rem, env(safe-area-inset-left));
+                padding-right: max(0.75rem, env(safe-area-inset-right));
+            }
+        }
+        
+        /* container 안전 영역 적용 */
+        .container {
+            max-width: 100%;
+            overflow-x: hidden;
+            padding-left: max(0.75rem, env(safe-area-inset-left));
+            padding-right: max(0.75rem, env(safe-area-inset-right));
+        }
     </style>
 </head>
-<body class="p-6">
+<body>
     <div class="container mx-auto max-w-4xl">
         <!-- 헤더 -->
-        <div class="glass-morphism rounded-2xl p-6 mb-8 shadow-2xl">
-            <div class="flex flex-col sm:flex-row justify-between items-center">
-                <div class="text-center sm:text-left mb-4 sm:mb-0">
-                    <h1 class="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent">
-                        🐱 딜냥이
-                    </h1>
-                    <p class="text-sm text-gray-500 mt-1">귀여운 냥이가 핫딜을 물어준다냥🐱</p>
+        <div class="glass-morphism rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-xl">
+            <div class="flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-500 bg-clip-text text-transparent">
+                            🐱 딜냥이
+                        </h1>
+                        <p class="text-xs sm:text-sm text-gray-500 mt-0.5">핫딜 정보를 쉽게 찾는다냥!</p>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <!-- 다크 모드 토글 -->
+                        <button id="darkModeToggle" onclick="toggleDarkMode()" class="dark-toggle p-2 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-yellow-400">
+                            <svg id="sunIcon" class="w-5 h-5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                            </svg>
+                            <svg id="moonIcon" class="w-5 h-5 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                            </svg>
+                        </button>
+                        
+                        <!-- 모바일 메뉴 버튼 -->
+                        <button id="mobileMenuBtn" class="sm:hidden p-2 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 
-                <div class="flex items-center space-x-3">
-                    <!-- 다크 모드 토글 -->
-                    <button id="darkModeToggle" onclick="toggleDarkMode()" class="dark-toggle p-2 rounded-xl bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-yellow-400 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all">
-                        <svg id="sunIcon" class="w-6 h-6 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
-                        </svg>
-                        <svg id="moonIcon" class="w-6 h-6 block dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
-                        </svg>
-                    </button>
-                    
-                    <div id="auth-section" class="w-full sm:w-auto">
-                    <button id="loginBtn" onclick="naverLogin()" class="naver-login-btn w-full sm:w-auto px-6 py-3 text-white font-semibold rounded-xl shadow-lg flex items-center justify-center sm:justify-start space-x-2">
+                <!-- 로그인/사용자 정보 -->
+                <div id="auth-section" class="flex items-center justify-between sm:justify-end">
+                    <button id="loginBtn" onclick="naverLogin()" class="naver-login-btn px-4 py-2 text-white font-semibold rounded-xl shadow flex items-center gap-2 text-sm">
                         <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M16.273 12.845L7.376 0H0v24h7.726V11.156L16.624 24H24V0h-7.727v12.845z"/>
                         </svg>
                         <span>네이버 로그인</span>
                     </button>
                     
-                    <!-- 로그인 후 -->
                     <div id="userInfo" class="hidden profile-container relative">
-                        <div class="flex items-center justify-center sm:justify-start space-x-3 bg-white rounded-xl px-4 py-2 shadow-md cursor-pointer hover:shadow-lg transition-all">
-                            <div class="relative">
-                                <img id="profileImg" src="" class="w-10 h-10 rounded-full border-2 border-purple-500 hidden">
-                                <div id="profileInitial" class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-lg"></div>
+                        <div class="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl px-3 py-2 cursor-pointer">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white font-bold text-sm">
+                                <span id="profileInitial"></span>
                             </div>
-                            <div class="flex flex-col">
-                                <span id="username" class="font-semibold text-gray-800 text-sm"></span>
-                                <span class="text-xs text-gray-500">네이버 회원</span>
-                            </div>
-                            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-                            </svg>
+                            <img id="profileImg" src="" class="w-8 h-8 rounded-full border-2 border-purple-500 hidden">
+                            <span id="username" class="font-semibold text-gray-800 dark:text-gray-200 text-sm"></span>
                         </div>
                         
-                        <!-- 드롭다운 메뉴 -->
                         <div class="profile-dropdown">
-                            <div class="px-3 py-2 border-b border-gray-100">
-                                <p class="text-xs text-gray-500">로그인됨</p>
-                                <p id="userEmail" class="text-sm font-medium text-gray-800"></p>
+                            <div class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+                                <p id="userEmail" class="text-sm font-medium text-gray-800 dark:text-gray-200"></p>
                             </div>
-                            <button onclick="logout()" class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg mt-1 transition-colors">
+                            <button onclick="logout()" class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg">
                                 🚪 로그아웃
                             </button>
                         </div>
@@ -260,132 +287,145 @@
                 </div>
             </div>
         </div>
-        <div class="glass-morphism p-6 rounded-2xl shadow-lg mb-8 transition-all duration-300" id="ai-search-container">
-            <div class="flex flex-col space-y-4">
-                <div class="relative flex items-center">
-                    <div class="absolute left-4 text-2xl">🐱</div>
-                    <input type="text" id="aiSearchInput" 
-                        class="w-full pl-12 pr-14 py-4 bg-white/80 border-2 border-purple-100 rounded-2xl focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all text-gray-700 placeholder-gray-400 font-medium"
-                        placeholder="예: 30만원대 가성비 모니터 추천해줘냥!"
-                        onkeypress="if(event.key === 'Enter') performAiSearch()">
-                    <button onclick="performAiSearch()" 
-                        class="absolute right-2 p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-xl text-white hover:shadow-lg transform hover:scale-105 transition-all active:scale-95">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
-                    </button>
+
+        <!-- 검색창 (AI 검색) -->
+        <div class="glass-morphism rounded-2xl p-4 mb-4 shadow-lg" id="ai-search-container">
+            <div class="relative flex items-center">
+                <span class="absolute left-3 text-xl">🐱</span>
+                <input type="text" id="aiSearchInput" 
+                    class="w-full pl-10 pr-12 py-3 bg-white/80 dark:bg-gray-800/80 border-2 border-purple-100 dark:border-gray-700 rounded-xl focus:outline-none focus:border-purple-500 text-gray-700 dark:text-gray-200 placeholder-gray-400 text-sm sm:text-base"
+                    placeholder="핫딜 검색... 예: 30만원대 모니터"
+                    onkeypress="if(event.key === 'Enter') performAiSearch()">
+                <button onclick="performAiSearch()" 
+                    class="absolute right-1.5 p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg text-white active:scale-95 transition-transform">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- AI 결과 영역 -->
+            <div id="aiResultArea" class="hidden mt-3">
+                <div id="aiLoading" class="hidden py-3 text-center">
+                    <div class="flex justify-center gap-1">
+                        <span class="text-lg swipe-hint">🐾</span>
+                        <span class="text-lg swipe-hint" style="animation-delay: 0.1s">🐾</span>
+                        <span class="text-lg swipe-hint" style="animation-delay: 0.2s">🐾</span>
+                    </div>
+                    <p class="text-xs text-purple-600 dark:text-purple-400 mt-1">검색 중...</p>
                 </div>
 
-                <div id="aiResultArea" class="hidden">
-                    <div id="aiLoading" class="hidden py-4 text-center">
-                        <div class="flex justify-center space-x-2 animate-bounce">
-                            <span class="text-2xl">🐾</span>
-                            <span class="text-2xl" style="animation-delay: 0.1s">🐾</span>
-                            <span class="text-2xl" style="animation-delay: 0.2s">🐾</span>
-                        </div>
-                        <p class="text-sm text-purple-600 font-medium mt-2">딜냥이가 핫딜을 뒤지고 있다냥...</p>
+                <div id="aiAnswerBox" class="hidden bg-white/60 dark:bg-gray-800/60 rounded-xl p-3 border border-purple-100 dark:border-gray-700">
+                    <div class="flex items-start gap-2">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-lg flex-shrink-0">🐱</div>
+                        <div id="aiAnswerText" class="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap"></div>
                     </div>
+                </div>
 
-                    <div id="aiAnswerBox" class="hidden bg-white/60 rounded-xl p-4 border border-purple-100">
-                        <div class="flex items-start space-x-3">
-                            <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-xl">🐱</div>
-                            <div class="flex-1">
-                                <div id="aiAnswerText" class="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="aiSourceSection" class="hidden mt-4">
-                        <button onclick="toggleAiSourceList()" class="w-full flex justify-between items-center px-4 py-3 bg-purple-50 hover:bg-purple-100 rounded-xl transition-colors group">
-                            <span class="text-xs font-bold text-purple-700 flex items-center">
-                                📎 관련 핫딜 모아보기
-                                <span id="aiSourceCount" class="ml-2 bg-purple-200 text-purple-800 px-2 py-0.5 rounded-full text-[10px]">0</span>
-                            </span>
-                            <svg id="aiToggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-purple-400 transform transition-transform duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </button>
-
-                        <div id="aiSourceList" class="mt-2 space-y-2 transition-all duration-300 origin-top">
-                            </div>
-                    </div>
+                <div id="aiSourceSection" class="hidden mt-3">
+                    <button onclick="toggleAiSourceList()" class="w-full flex justify-between items-center px-3 py-2 bg-purple-50 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-gray-700 rounded-xl transition-colors">
+                        <span class="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1">
+                            📎 관련 핫딜 <span id="aiSourceCount" class="bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200 px-1.5 rounded-full text-[10px]">0</span>
+                        </span>
+                        <svg id="aiToggleIcon" class="w-4 h-4 text-purple-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                        </svg>
+                    </button>
+                    <div id="aiSourceList" class="mt-2 space-y-2"></div>
                 </div>
             </div>
         </div>
 
-        <!-- 소스 필터 -->
-        <div id="source-buttons" class="flex justify-center flex-wrap gap-2 mb-4">
-            <button data-source="all" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap active">
-                🔥 전체보기
-            </button>
-            <button data-source="뽐뿌" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
-                💰 뽐뿌
-            </button>
-            <button data-source="루리웹" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
-                🎮 루리웹
-            </button>
-            <button data-source="Zod" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
-                🛒 Zod
-            </button>
-            <button data-source="어미새" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
-                🐦 어미새
-            </button>
-            <button data-source="퀘이사존" class="source-btn px-4 py-2 bg-white text-gray-700 rounded-xl shadow-md font-semibold transition-all duration-200 border border-gray-200 whitespace-nowrap">
-                🖥️ 퀘이사존
-            </button>
+        <!-- 소스 필터 (가로 스크롤) -->
+        <div class="mb-4">
+            <div id="source-buttons" class="source-scroll flex gap-2 pb-2">
+                <button data-source="all" class="source-btn px-4 py-2.5 bg-white text-gray-700 rounded-xl shadow font-semibold border border-gray-200 active flex-shrink-0">
+                    🔥 전체
+                </button>
+                <button data-source="뽐뿌" class="source-btn px-4 py-2.5 bg-white text-gray-700 rounded-xl shadow font-semibold border border-gray-200 flex-shrink-0">
+                    💰 뽐뿌
+                </button>
+                <button data-source="루리웹" class="source-btn px-4 py-2.5 bg-white text-gray-700 rounded-xl shadow font-semibold border border-gray-200 flex-shrink-0">
+                    🎮 루리웹
+                </button>
+                <button data-source="Zod" class="source-btn px-4 py-2.5 bg-white text-gray-700 rounded-xl shadow font-semibold border border-gray-200 flex-shrink-0">
+                    🛒 Zod
+                </button>
+                <button data-source="어미새" class="source-btn px-4 py-2.5 bg-white text-gray-700 rounded-xl shadow font-semibold border border-gray-200 flex-shrink-0">
+                    🐦 어미새
+                </button>
+                <button data-source="퀘이사존" class="source-btn px-4 py-2.5 bg-white text-gray-700 rounded-xl shadow font-semibold border border-gray-200 flex-shrink-0">
+                    🖥️ 퀘이사존
+                </button>
+            </div>
         </div>
 
-        <!-- 필터 및 정렬 -->
-        <div class="glass-morphism rounded-2xl p-4 mb-8">
-            <div class="flex flex-wrap items-center gap-4">
-                <!-- 가격 범위 필터 -->
-                <div class="flex items-center space-x-2">
-                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">💰 가격:</span>
-                    <select id="priceRangeFilter" class="px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
-                        <option value="all">전체</option>
-                        <option value="0-5만">0~5만원</option>
-                        <option value="5-10만">5~10만원</option>
-                        <option value="10-20만">10~20만원</option>
-                        <option value="20만+">20만원+</option>
-                    </select>
+        <!-- 필터 및 정렬 (접기 가능한 패널) -->
+        <div class="glass-morphism rounded-2xl mb-4 shadow-lg overflow-hidden">
+            <!-- 필터 헤더 (모바일에서 접기) -->
+            <button id="filterToggle" onclick="toggleFilters()" class="w-full flex justify-between items-center p-3 sm:hidden border-b border-gray-200 dark:border-gray-700">
+                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">🔍 필터</span>
+                <svg id="filterToggleIcon" class="w-5 h-5 text-gray-500 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            
+            <!-- 필터 컨텐츠 -->
+            <div id="filterContent" class="p-3 sm:p-4">
+                <div class="flex flex-wrap items-center gap-3">
+                    <!-- 가격 범위 -->
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">💰</span>
+                        <select id="priceRangeFilter" class="px-2 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="all">전체가격</option>
+                            <option value="0-5만">0~5만</option>
+                            <option value="5-10만">5~10만</option>
+                            <option value="10-20만">10~20만</option>
+                            <option value="20만+">20만+</option>
+                        </select>
+                    </div>
+                    
+                    <!-- 무료배송 -->
+                    <label class="flex items-center gap-1.5 cursor-pointer">
+                        <input type="checkbox" id="shippingFreeFilter" class="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500">
+                        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">🚚무료배송</span>
+                    </label>
+                    
+                    <!-- 정렬 -->
+                    <div class="flex items-center gap-1.5 ml-auto">
+                        <select id="sortOrder" class="px-2 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="latest">🕐 최신</option>
+                            <option value="oldest">📅 오래된</option>
+                        </select>
+                    </div>
                 </div>
                 
-                <!-- 무료배송 필터 -->
-                <div class="flex items-center space-x-2">
-                    <input type="checkbox" id="shippingFreeFilter" class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
-                    <label for="shippingFreeFilter" class="text-sm font-medium text-gray-700 dark:text-gray-300">무료배송만</label>
-                </div>
-                
-                <!-- 정렬 -->
-                <div class="flex items-center space-x-2">
-                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300">📅 정렬:</span>
-                    <select id="sortOrder" class="px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
-                        <option value="latest">최신순</option>
-                        <option value="oldest">오래된순</option>
-                    </select>
-                </div>
-                
-                <!-- 초기화 버튼 -->
-                <button onclick="resetFilters()" class="ml-auto px-3 py-1.5 text-sm text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900 rounded-lg transition-colors">
-                    🔄 초기화
+                <!-- 초기화 버튼 (데스크톱) -->
+                <button onclick="resetFilters()" class="hidden sm:block w-full mt-2 py-1.5 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-gray-800 rounded-lg transition-colors sm:w-auto">
+                    🔄 필터 초기화
                 </button>
             </div>
         </div>
         
         <!-- 핫딜 리스트 -->
-        <div id="hotdeal-list" class="space-y-4">
+        <div id="hotdeal-list" class="space-y-3">
             <div class="glass-morphism p-6 text-center rounded-2xl shadow-lg">
-                <div class="flex items-center justify-center space-x-2">
+                <div class="flex justify-center gap-1 mb-2">
                     <span class="paw-print">🐾</span>
                     <span class="paw-print">🐾</span>
                     <span class="paw-print">🐾</span>
-                    <span class="ml-3 text-gray-600">딜냥이가 핫딜을 물어오는 중...</span>
                 </div>
+                <p class="text-gray-500 text-sm">딜냥이가 핫딜을 물어오는 중...</p>
             </div>
         </div>
         
         <!-- 페이지네이션 -->
-        <div id="pagination" class="mt-8"></div>
+        <div id="pagination" class="mt-4"></div>
+        
+        <!-- 푸터 -->
+        <div class="text-center mt-6 mb-2 text-xs text-gray-500 dark:text-gray-400">
+            <p>🐱 딜냥이 | 핫딜 정보를 합리적으로!</p>
+        </div>
     </div>
 
     <script>
@@ -410,13 +450,6 @@
         
         // 페이지 로드 시 로그인 상태 확인
         window.addEventListener('DOMContentLoaded', async () => {
-            const urlParams = new URLSearchParams(window.location.search);
-            const token = urlParams.get('token');
-            
-            if (token) {
-                window.history.replaceState({}, document.title, "/");
-            }
-
             try {
                 const response = await fetch('/api/auth/me');
                 
@@ -428,25 +461,19 @@
                     document.getElementById('username').textContent = user.username;
                     document.getElementById('userEmail').textContent = user.email;
                     
-                    // 프로필 이미지 처리
                     if (user.profile_image && user.profile_image.trim()) {
                         document.getElementById('profileImg').src = user.profile_image;
                         document.getElementById('profileImg').classList.remove('hidden');
                         document.getElementById('profileInitial').style.display = 'none';
                     } else {
-                        // 이름 첫 글자로 아바타 생성
-                        const initial = user.username.charAt(0).toUpperCase();
-                        document.getElementById('profileInitial').textContent = initial;
+                        document.getElementById('profileInitial').textContent = user.username.charAt(0).toUpperCase();
                     }
-                    
-                    console.log('로그인 성공:', user);
                 }
             } catch (error) {
                 console.error('유저 정보 로드 실패:', error);
             }
         });
     </script>
-
     <script src="/main.js" defer></script>
 </body>
 </html>
