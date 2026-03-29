@@ -75,7 +75,7 @@ PORT = int(os.getenv("PORT", 8000))
 NAVER_CLIENT_ID = os.getenv("NAVER_CLIENT_ID")
 NAVER_CLIENT_SECRET = os.getenv("NAVER_CLIENT_SECRET")
 if IS_PRODUCTION:
-    BASE_URL = os.getenv("BASE_URL", "https://shopcrawl.example.com")
+    BASE_URL = os.getenv("BASE_URL", "https://www.dealcat.co.kr")
 else:
     BASE_URL = "http://localhost:8000"
 NAVER_CALLBACK_URL = f"{BASE_URL}/api/auth/naver/callback"
