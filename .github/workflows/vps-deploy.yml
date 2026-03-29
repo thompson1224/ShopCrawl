@@ -25,10 +25,10 @@ jobs:
           envs:
             NAVER_CLIENT_ID,NAVER_CLIENT_SECRET,GOOGLE_API_KEY,ADMIN_SECRET,BASE_URL
           script: |
-            cd /opt/shopcrawl
+            cd /home/ubuntu/ShopCrawl
             
             # Create .env file with secrets
-            sudo tee .env > /dev/null << 'ENDFILE'
+            sudo tee .env > /dev/null << ENDFILE
             NAVER_CLIENT_ID=$NAVER_CLIENT_ID
             NAVER_CLIENT_SECRET=$NAVER_CLIENT_SECRET
             GOOGLE_API_KEY=$GOOGLE_API_KEY
