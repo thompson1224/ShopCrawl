@@ -499,6 +499,161 @@ async function performAiSearch() {
     }
 }
 
+// --- 일반 검색 기능 ---
+async function performSearch() {
+    const input = document.getElementById('searchInput');
+    const query = input.value.trim();
+    
+    if (!query) {
+        alert('검색어를 입력해주세요.');
+        return;
+    }
+    
+    const params = new URLSearchParams({
+        q: query,
+        source: 'all',
+        page: 1,
+        per_page: 50,
+        category: 'all',
+        price_range: 'all',
+        shipping_free: false,
+        sort: 'latest'
+    });
+    
+    const backendUrl = `/api/search?${params.toString()}`;
+    
+    try {
+        const response = await fetch(backendUrl);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const data = await response.json();
+        
+        if (data.deals && data.deals.length > 0) {
+            renderSearchResults(data.deals);
+        } else {
+            document.getElementById('hotdeal-list').innerHTML = 
+                '<div class="glass-morphism p-6 text-center rounded-xl shadow-lg"><span class="text-3xl">🔍</span><p class="mt-2 text-gray-500">검색 결과가 없습니다.</p></div>';
+        }
+    } catch (error) {
+        console.error('검색 실패:', error);
+        document.getElementById('hotdeal-list').innerHTML = 
+            '<div class="glass-morphism p-6 text-center rounded-xl shadow-lg"><span class="text-3xl">😾</span><p class="mt-2 text-red-500">검색 중 오류가 발생했습니다.</p></div>';
+    }
+}
+
+function renderSearchResults(deals) {
+    const hotdealList = document.getElementById('hotdeal-list');
+    hotdealList.innerHTML = '';
+    
+    deals.forEach(deal => {
+        const safeLink = sanitizeExternalUrl(deal.link);
+        const safeThumbnail = sanitizeExternalUrl(deal.thumbnail);
+
+        const cardContainer = document.createElement('div');
+        cardContainer.className = 'relative';
+
+        const linkContainer = document.createElement('a');
+        linkContainer.href = safeLink;
+        linkContainer.target = '_blank';
+        linkContainer.rel = 'noopener noreferrer';
+        linkContainer.className = 'block glass-morphism rounded-xl shadow-lg deal-item-container hotdeal-card';
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'flex gap-3';
+
+        const thumbnailWrapper = document.createElement('div');
+        thumbnailWrapper.className = 'flex-shrink-0 hotdeal-thumb';
+
+        if (safeThumbnail !== '#') {
+            const image = document.createElement('img');
+            image.src = `/image-proxy?url=${encodeURIComponent(safeThumbnail)}&source=${encodeURIComponent(deal.source)}`;
+            image.alt = deal.title || '핫딜 이미지';
+            image.className = 'w-full h-full object-cover rounded-lg border-2 border-gray-100 dark:border-gray-700 shadow-sm';
+            image.onerror = () => {
+                const fallback = createFallbackThumbnail();
+                fallback.className += ' rounded-lg';
+                image.replaceWith(fallback);
+            };
+            thumbnailWrapper.appendChild(image);
+        } else {
+            thumbnailWrapper.appendChild(createFallbackThumbnail());
+        }
+
+        const content = document.createElement('div');
+        content.className = 'flex-1 min-w-0 flex flex-col justify-between';
+
+        const topSection = document.createElement('div');
+
+        const metaRow = document.createElement('div');
+        metaRow.className = 'flex items-center gap-1.5 text-[10px] sm:text-xs mb-1 flex-wrap';
+
+        const sourceBadge = document.createElement('span');
+        sourceBadge.className = 'font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full';
+        sourceBadge.textContent = deal.source;
+
+        const categoryBadge = document.createElement('span');
+        categoryBadge.className = 'px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full text-[10px]';
+        categoryBadge.textContent = deal.category || '기타';
+
+        const timeText = document.createElement('span');
+        timeText.className = 'text-gray-400';
+        timeText.textContent = getTimeAgo(deal.created_at);
+
+        metaRow.append(sourceBadge, categoryBadge, timeText);
+
+        const title = document.createElement('h2');
+        title.className = 'hotdeal-title font-bold text-gray-800 dark:text-gray-200 mb-1';
+        title.textContent = deal.title;
+
+        topSection.append(metaRow, title);
+        content.appendChild(topSection);
+
+        const bottomSection = document.createElement('div');
+        bottomSection.className = 'flex items-end justify-between gap-2 mt-1';
+
+        const priceRow = document.createElement('div');
+        priceRow.className = 'flex flex-wrap items-baseline gap-1';
+
+        const price = document.createElement('span');
+        price.className = 'hotdeal-price font-bold bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent';
+        price.textContent = deal.price || '가격 없음';
+        priceRow.appendChild(price);
+
+        if (deal.shipping) {
+            const shipping = document.createElement('span');
+            shipping.className = 'text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded';
+            shipping.textContent = deal.shipping;
+            priceRow.appendChild(shipping);
+        }
+
+        bottomSection.appendChild(priceRow);
+
+        const arrow = document.createElement('span');
+        arrow.className = 'text-gray-300 text-lg';
+        arrow.textContent = '→';
+        bottomSection.appendChild(arrow);
+
+        content.appendChild(bottomSection);
+        wrapper.appendChild(thumbnailWrapper);
+        wrapper.appendChild(content);
+        linkContainer.appendChild(wrapper);
+
+        const commentBtn = document.createElement('button');
+        commentBtn.className = 'absolute top-3 right-3 p-2 bg-white/80 dark:bg-gray-800/80 rounded-full shadow text-purple-500 hover:bg-purple-100 dark:hover:bg-purple-900 transition-colors';
+        commentBtn.innerHTML = '💬';
+        commentBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            openCommentModal(deal.id, deal.title);
+        };
+        cardContainer.appendChild(linkContainer);
+        cardContainer.appendChild(commentBtn);
+
+        hotdealList.appendChild(cardContainer);
+    });
+    
+    document.getElementById('pagination').innerHTML = '';
+}
+
 // --- [추가] 리스트 토글 기능 ---
 function toggleAiSourceList() {
     const list = document.getElementById('aiSourceList');

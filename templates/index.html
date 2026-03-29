@@ -291,51 +291,20 @@
             </div>
         </div>
 
-        <!-- 검색창 (AI 검색) -->
-        <div class="glass-morphism rounded-2xl p-4 mb-4 shadow-lg" id="ai-search-container">
+        <!-- 검색창 (일반 검색) -->
+        <div class="glass-morphism rounded-2xl p-4 mb-4 shadow-lg" id="search-container">
             <div class="relative flex items-center">
-                <span class="absolute left-3 text-xl">🐱</span>
-                <input type="text" id="aiSearchInput" 
+                <span class="absolute left-3 text-xl">🔍</span>
+                <input type="text" id="searchInput" 
                     class="w-full pl-10 pr-12 py-3 bg-white/80 dark:bg-gray-800/80 border-2 border-purple-100 dark:border-gray-700 rounded-xl focus:outline-none focus:border-purple-500 text-gray-700 dark:text-gray-200 placeholder-gray-400 text-sm sm:text-base"
-                    placeholder="핫딜 검색... 예: 30만원대 모니터"
-                    onkeypress="if(event.key === 'Enter') performAiSearch()">
-                <button onclick="performAiSearch()" 
+                    placeholder="핫딜 검색... 예: 노트북, 냉장고"
+                    onkeypress="if(event.key === 'Enter') performSearch()">
+                <button onclick="performSearch()" 
                     class="absolute right-1.5 p-2 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg text-white active:scale-95 transition-transform">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                 </button>
-            </div>
-
-            <!-- AI 결과 영역 -->
-            <div id="aiResultArea" class="hidden mt-3">
-                <div id="aiLoading" class="hidden py-3 text-center">
-                    <div class="flex justify-center gap-1">
-                        <span class="text-lg swipe-hint">🐾</span>
-                        <span class="text-lg swipe-hint" style="animation-delay: 0.1s">🐾</span>
-                        <span class="text-lg swipe-hint" style="animation-delay: 0.2s">🐾</span>
-                    </div>
-                    <p class="text-xs text-purple-600 dark:text-purple-400 mt-1">검색 중...</p>
-                </div>
-
-                <div id="aiAnswerBox" class="hidden bg-white/60 dark:bg-gray-800/60 rounded-xl p-3 border border-purple-100 dark:border-gray-700">
-                    <div class="flex items-start gap-2">
-                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-lg flex-shrink-0">🐱</div>
-                        <div id="aiAnswerText" class="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap"></div>
-                    </div>
-                </div>
-
-                <div id="aiSourceSection" class="hidden mt-3">
-                    <button onclick="toggleAiSourceList()" class="w-full flex justify-between items-center px-3 py-2 bg-purple-50 dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-gray-700 rounded-xl transition-colors">
-                        <span class="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1">
-                            📎 관련 핫딜 <span id="aiSourceCount" class="bg-purple-200 dark:bg-purple-800 text-purple-800 dark:text-purple-200 px-1.5 rounded-full text-[10px]">0</span>
-                        </span>
-                        <svg id="aiToggleIcon" class="w-4 h-4 text-purple-400 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                        </svg>
-                    </button>
-                    <div id="aiSourceList" class="mt-2 space-y-2"></div>
-                </div>
             </div>
         </div>
 
