@@ -279,6 +279,9 @@
                             <div class="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
                                 <p id="userEmail" class="text-sm font-medium text-gray-800 dark:text-gray-200"></p>
                             </div>
+                            <button onclick="openTelegramSettings()" class="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900 rounded-lg">
+                                📱 Telegram 알림 설정
+                            </button>
                             <button onclick="logout()" class="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg">
                                 🚪 로그아웃
                             </button>
@@ -373,6 +376,21 @@
             <!-- 필터 컨텐츠 -->
             <div id="filterContent" class="p-3 sm:p-4">
                 <div class="flex flex-wrap items-center gap-3">
+                    <!-- 카테고리 -->
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">📂</span>
+                        <select id="categoryFilter" class="px-2 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="all">전체카테고리</option>
+                            <option value="가전/디지털">📱 가전/디지털</option>
+                            <option value="신세계/아웃렛">👟 신세계/아웃렛</option>
+                            <option value="뷰티/화장품">💄 뷰티/화장품</option>
+                            <option value="식품/건강">🍎 식품/건강</option>
+                            <option value="가구/인테리어">🏠 가구/인테리어</option>
+                            <option value="게임/취미">🎮 게임/취미</option>
+                            <option value="기타">📦 기타</option>
+                        </select>
+                    </div>
+                    
                     <!-- 가격 범위 -->
                     <div class="flex items-center gap-1.5">
                         <span class="text-xs sm:text-sm text-gray-600 dark:text-gray-400">💰</span>
@@ -473,7 +491,279 @@
                 console.error('유저 정보 로드 실패:', error);
             }
         });
+        
+        // 댓글 모달
+        let currentDealId = null;
+        
+        async function openCommentModal(dealId, dealTitle) {
+            currentDealId = dealId;
+            const modal = document.getElementById('commentModal');
+            const modalTitle = document.getElementById('commentModalTitle');
+            const commentList = document.getElementById('commentList');
+            const commentInput = document.getElementById('commentInput');
+            
+            modalTitle.textContent = dealTitle ? dealTitle.substring(0, 30) + '...' : '댓글';
+            commentInput.value = '';
+            commentList.innerHTML = '<div class="text-center py-4 text-gray-500">로딩 중...</div>';
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+            
+            await loadComments(dealId);
+        }
+        
+        async function loadComments(dealId) {
+            const commentList = document.getElementById('commentList');
+            try {
+                const response = await fetch(`/api/deals/${dealId}/comments`);
+                const data = await response.json();
+                
+                if (data.comments.length === 0) {
+                    commentList.innerHTML = '<div class="text-center py-4 text-gray-500"> 아직 댓글이 없어요. 첫 댓글을 달아보세요! </div>';
+                } else {
+                    commentList.innerHTML = data.comments.map(c => `
+                        <div class="p-3 bg-white/50 dark:bg-gray-800/50 rounded-lg">
+                            <div class="flex items-center justify-between mb-1">
+                                <span class="font-semibold text-sm text-purple-600 dark:text-purple-400">@${escapeHtml(c.author_name)}</span>
+                                <span class="text-xs text-gray-400">${formatTimeAgo(c.created_at)}</span>
+                            </div>
+                            <p class="text-sm text-gray-700 dark:text-gray-300">${escapeHtml(c.content)}</p>
+                            ${c.user_id == window.currentUserId ? `<button onclick="deleteComment(${c.id})" class="text-xs text-red-500 mt-1">삭제</button>` : ''}
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                commentList.innerHTML = '<div class="text-center py-4 text-red-500"> 댓글 로드 실패 </div>';
+            }
+        }
+        
+        async function submitComment() {
+            const commentInput = document.getElementById('commentInput');
+            const content = commentInput.value.trim();
+            
+            if (!content) {
+                alert('댓글 내용을 입력해주세요.');
+                return;
+            }
+            
+            try {
+                const token = getAccessToken();
+                const response = await fetch(`/api/deals/${currentDealId}/comments`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Access-Token': token || ''
+                    },
+                    body: JSON.stringify({ content })
+                });
+                
+                if (response.status === 401) {
+                    alert('로그인이 필요합니다.');
+                    return;
+                }
+                
+                if (response.ok) {
+                    commentInput.value = '';
+                    await loadComments(currentDealId);
+                } else {
+                    alert('댓글 작성에 실패했습니다.');
+                }
+            } catch (error) {
+                alert('댓글 작성에 실패했습니다.');
+            }
+        }
+        
+        async function deleteComment(commentId) {
+            if (!confirm('댓글을 삭제할까요?')) return;
+            
+            try {
+                const token = getAccessToken();
+                const response = await fetch(`/api/comments/${commentId}`, {
+                    method: 'DELETE',
+                    headers: { 'X-Access-Token': token || '' }
+                });
+                
+                if (response.ok) {
+                    await loadComments(currentDealId);
+                } else {
+                    alert('삭제 권한이 없습니다.');
+                }
+            } catch (error) {
+                alert('삭제에 실패했습니다.');
+            }
+        }
+        
+        function closeCommentModal() {
+            const modal = document.getElementById('commentModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.style.overflow = '';
+            currentDealId = null;
+        }
+        
+        // Telegram 설정 모달
+        function openTelegramSettings() {
+            const modal = document.getElementById('telegramModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            document.body.style.overflow = 'hidden';
+            loadTelegramSettings();
+        }
+        
+        function closeTelegramModal() {
+            const modal = document.getElementById('telegramModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.body.style.overflow = '';
+        }
+        
+        async function loadTelegramSettings() {
+            const chatIdInput = document.getElementById('telegramChatId');
+            const statusDiv = document.getElementById('telegramStatus');
+            
+            chatIdInput.value = '';
+            statusDiv.innerHTML = '';
+        }
+        
+        async function registerTelegram() {
+            const chatIdInput = document.getElementById('telegramChatId');
+            const chatId = chatIdInput.value.trim();
+            
+            if (!chatId) {
+                alert('Telegram Chat ID를 입력해주세요.');
+                return;
+            }
+            
+            const selectedCategories = Array.from(document.querySelectorAll('#telegramCategories input:checked')).map(cb => cb.value);
+            const keywordInput = document.getElementById('telegramKeywords');
+            const keywords = keywordInput.value.split(',').map(k => k.trim()).filter(k => k);
+            
+            try {
+                const response = await fetch('/api/telegram/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: chatId,
+                        categories: selectedCategories,
+                        keywords: keywords
+                    })
+                });
+                
+                if (response.ok) {
+                    alert('Telegram 알림이 설정되었습니다!');
+                    closeTelegramModal();
+                } else {
+                    alert('설정에 실패했습니다.');
+                }
+            } catch (error) {
+                alert('설정에 실패했습니다.');
+            }
+        }
+        
+        function getAccessToken() {
+            return document.cookie.split('; ').find(row => row.startsWith('access_token='))?.split('=')[1];
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function formatTimeAgo(dateStr) {
+            const date = new Date(dateStr);
+            const now = new Date();
+            const diff = Math.floor((now - date) / 1000);
+            
+            if (diff < 60) return '방금';
+            if (diff < 3600) return Math.floor(diff / 60) + '분 전';
+            if (diff < 86400) return Math.floor(diff / 3600) + '시간 전';
+            return Math.floor(diff / 86400) + '일 전';
+        }
     </script>
+    
+    <!-- 댓글 모달 -->
+    <div id="commentModal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h3 class="font-bold text-gray-800 dark:text-gray-200">💬 <span id="commentModalTitle">댓글</span></h3>
+                <button onclick="closeCommentModal()" class="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="commentList" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+            <div class="p-4 border-t border-gray-200 dark:border-gray-700">
+                <div class="flex gap-2">
+                    <input type="text" id="commentInput" placeholder="댓글을 입력하세요..."
+                        class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                        onkeypress="if(event.key==='Enter') submitComment()">
+                    <button onclick="submitComment()" class="px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-xl text-sm font-semibold active:scale-95">
+                        전송
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mt-2 text-center">💡 댓글 작성은 네이버 로그인이 필요합니다.</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Telegram 설정 모달 -->
+    <div id="telegramModal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-md overflow-hidden">
+            <div class="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                <h3 class="font-bold text-gray-800 dark:text-gray-200">📱 Telegram 알림 설정</h3>
+                <button onclick="closeTelegramModal()" class="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="p-4 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Telegram Chat ID</label>
+                    <input type="text" id="telegramChatId" placeholder="예: 123456789"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+                    <p class="text-xs text-gray-500 mt-1">@DealCatBot 에서 /start 후 Chat ID를 입력하세요.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">관심 카테고리</label>
+                    <div id="telegramCategories" class="grid grid-cols-2 gap-2 text-xs">
+                        <label class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer">
+                            <input type="checkbox" value="가전/디지털" class="rounded"> 📱 가전/디지털
+                        </label>
+                        <label class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer">
+                            <input type="checkbox" value="신세계/아웃렛" class="rounded"> 👟 신세계/아웃렛
+                        </label>
+                        <label class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer">
+                            <input type="checkbox" value="뷰티/화장품" class="rounded"> 💄 뷰티/화장품
+                        </label>
+                        <label class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer">
+                            <input type="checkbox" value="식품/건강" class="rounded"> 🍎 식품/건강
+                        </label>
+                        <label class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer">
+                            <input type="checkbox" value="가구/인테리어" class="rounded"> 🏠 가구/인테리어
+                        </label>
+                        <label class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700 rounded-lg cursor-pointer">
+                            <input type="checkbox" value="게임/취미" class="rounded"> 🎮 게임/취미
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">관심 키워드</label>
+                    <input type="text" id="telegramKeywords" placeholder="예: 노트북, 무료배송, 세일"
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200">
+                    <p class="text-xs text-gray-500 mt-1">쉼표로 구분하여 입력하세요.</p>
+                </div>
+                <div id="telegramStatus" class="text-sm text-center"></div>
+                <button onclick="registerTelegram()" class="w-full py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-xl text-sm font-semibold active:scale-95">
+                    저장하기
+                </button>
+            </div>
+        </div>
+    </div>
+    
     <script src="/main.js" defer></script>
 </body>
 </html>

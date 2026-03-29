@@ -98,6 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSource = 'all';
     let totalPages = 1;
     let currentPriceRange = 'all';
+    let currentCategory = 'all';
     let currentShippingFree = false;
     let currentSort = 'latest';
     let filtersExpanded = false;
@@ -127,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
             page: page,
             per_page: 20,
             price_range: currentPriceRange,
+            category: currentCategory,
             shipping_free: currentShippingFree,
             sort: currentSort
         });
@@ -163,6 +165,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const safeLink = sanitizeExternalUrl(deal.link);
                 const safeThumbnail = sanitizeExternalUrl(deal.thumbnail);
 
+                const cardContainer = document.createElement('div');
+                cardContainer.className = 'relative';
+
                 const linkContainer = document.createElement('a');
                 linkContainer.href = safeLink;
                 linkContainer.target = '_blank';
@@ -196,17 +201,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 const topSection = document.createElement('div');
 
                 const metaRow = document.createElement('div');
-                metaRow.className = 'flex items-center gap-1.5 text-[10px] sm:text-xs mb-1';
+                metaRow.className = 'flex items-center gap-1.5 text-[10px] sm:text-xs mb-1 flex-wrap';
 
                 const sourceBadge = document.createElement('span');
                 sourceBadge.className = 'font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full';
                 sourceBadge.textContent = deal.source;
 
+                const categoryBadge = document.createElement('span');
+                categoryBadge.className = 'px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full text-[10px]';
+                categoryBadge.textContent = deal.category || '기타';
+
                 const timeText = document.createElement('span');
                 timeText.className = 'text-gray-400';
                 timeText.textContent = getTimeAgo(deal.created_at);
 
-                metaRow.append(sourceBadge, timeText);
+                metaRow.append(sourceBadge, categoryBadge, timeText);
 
                 const title = document.createElement('h2');
                 title.className = 'hotdeal-title font-bold text-gray-800 dark:text-gray-200 mb-1';
@@ -245,7 +254,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 wrapper.appendChild(content);
                 linkContainer.appendChild(wrapper);
 
-                hotdealList.appendChild(linkContainer);
+                // 댓글 버튼
+                const commentBtn = document.createElement('button');
+                commentBtn.className = 'absolute top-3 right-3 p-2 bg-white/80 dark:bg-gray-800/80 rounded-full shadow text-purple-500 hover:bg-purple-100 dark:hover:bg-purple-900 transition-colors';
+                commentBtn.innerHTML = '💬';
+                commentBtn.onclick = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openCommentModal(deal.id, deal.title);
+                };
+                cardContainer.appendChild(linkContainer);
+                cardContainer.appendChild(commentBtn);
+
+                hotdealList.appendChild(cardContainer);
             });            
             
             renderPagination(pagination);
@@ -352,26 +373,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 필터 이벤트 리스너
     const priceRangeFilter = document.getElementById('priceRangeFilter');
+    const categoryFilter = document.getElementById('categoryFilter');
     const shippingFreeFilter = document.getElementById('shippingFreeFilter');
     const sortOrder = document.getElementById('sortOrder');
 
     const applyFilters = () => {
         currentPriceRange = priceRangeFilter.value;
+        currentCategory = categoryFilter.value;
         currentShippingFree = shippingFreeFilter.checked;
         currentSort = sortOrder.value;
         fetchHotDeals(currentSource, 1);
     };
 
     priceRangeFilter.addEventListener('change', applyFilters);
+    categoryFilter.addEventListener('change', applyFilters);
     shippingFreeFilter.addEventListener('change', applyFilters);
     sortOrder.addEventListener('change', applyFilters);
 
     // 필터 초기화 함수
     window.resetFilters = () => {
         priceRangeFilter.value = 'all';
+        categoryFilter.value = 'all';
         shippingFreeFilter.checked = false;
         sortOrder.value = 'latest';
         currentPriceRange = 'all';
+        currentCategory = 'all';
         currentShippingFree = false;
         currentSort = 'latest';
         fetchHotDeals(currentSource, 1);

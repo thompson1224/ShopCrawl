@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends, Header, Query
+from fastapi import FastAPI, Request, Depends, Header, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import FileResponse, JSONResponse, RedirectResponse, Response
@@ -13,6 +13,7 @@ from auth import (
     get_current_user,
     get_current_user_required,
     get_db,
+    decode_token,
 )
 from models import User
 from fastapi.staticfiles import StaticFiles
@@ -31,9 +32,17 @@ import os
 import re
 import time
 import httpx
+from typing import List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
-from models import HotDeal, RuliwebThumbnail, SessionLocal
+from models import (
+    HotDeal,
+    RuliwebThumbnail,
+    SessionLocal,
+    Comment,
+    TelegramUser,
+    classify_category,
+)
 from datetime import datetime, timedelta
 import logging
 import pytz
@@ -316,6 +325,7 @@ async def scrape_ppomppu():
                     else "배송비 정보 없음"
                 )
                 clean_title = clean_deal_title(full_title)
+                category = classify_category(clean_title)
                 deal_list.append(
                     {
                         "thumbnail": thumbnail,
@@ -325,6 +335,7 @@ async def scrape_ppomppu():
                         "price": price,
                         "shipping": shipping,
                         "link": link,
+                        "category": category,
                     }
                 )
         except Exception:
@@ -370,6 +381,7 @@ async def scrape_ruliweb():
 
                     price = extract_price(full_title)
                     clean_title = clean_deal_title(full_title)
+                    category = classify_category(clean_title)
 
                     deal_list.append(
                         {
@@ -380,6 +392,7 @@ async def scrape_ruliweb():
                             "price": price,
                             "shipping": "정보 없음",
                             "link": link,
+                            "category": category,
                         }
                     )
                 except Exception:
@@ -545,6 +558,7 @@ async def scrape_zod():
                         "price": price,
                         "shipping": shipping,
                         "link": link,
+                        "category": classify_category(title),
                     }
                 )
             except Exception:
@@ -661,6 +675,7 @@ async def scrape_quasarzone():
                         "price": price,
                         "shipping": shipping,
                         "link": link,
+                        "category": classify_category(title),
                     }
                 )
 
@@ -744,6 +759,7 @@ async def scrape_eomisae():
                         "price": price,
                         "shipping": shipping,
                         "link": link,
+                        "category": classify_category(title),
                     }
                 )
 
@@ -811,11 +827,13 @@ async def crawl_and_save_to_db():
                         or existing.price != deal["price"]
                         or existing.shipping != deal["shipping"]
                         or existing.thumbnail != deal["thumbnail"]
+                        or existing.category != deal.get("category", "기타")
                     )
                     existing.title = deal["title"]
                     existing.price = deal["price"]
                     existing.shipping = deal["shipping"]
                     existing.thumbnail = deal["thumbnail"]
+                    existing.category = deal.get("category", "기타")
                     duplicate_count += 1
                     if changed:
                         deals_for_rag.append(make_rag_document(deal))
@@ -1049,11 +1067,14 @@ async def hotdeals(
     price_range: str = Query(
         default="all", regex="^(all|0-5만|5-10만|10-20만|20만\\+)$"
     ),
+    category: str = "all",
     shipping_free: bool = False,
     sort: str = Query(default="latest", regex="^(latest|oldest)$"),
     db: Session = Depends(get_db),
 ):
-    cache_key = f"{source}:{page}:{per_page}:{price_range}:{shipping_free}:{sort}"
+    cache_key = (
+        f"{source}:{page}:{per_page}:{price_range}:{category}:{shipping_free}:{sort}"
+    )
     now = time.time()
     if cache_key in _hotdeals_cache:
         ts, cached = _hotdeals_cache[cache_key]
@@ -1064,6 +1085,9 @@ async def hotdeals(
 
     if source != "all":
         query = query.filter(HotDeal.source == source)
+
+    if category != "all":
+        query = query.filter(HotDeal.category == category)
 
     if shipping_free:
         query = query.filter(HotDeal.shipping.like("%무료%"))
@@ -1131,6 +1155,299 @@ async def stats(db: Session = Depends(get_db)):
         "eomisae": eomisae_count,
         "quasarzone": quasarzone_count,
     }
+
+
+# 카테고리 목록 API
+@app.get("/api/categories")
+async def categories():
+    return {
+        "categories": [
+            {"id": "가전/디지털", "name": "가전/디지털", "icon": "📱"},
+            {"id": "신세계/아웃렛", "name": "신세계/아웃렛", "icon": "👟"},
+            {"id": "뷰티/화장품", "name": "뷰티/화장품", "icon": "💄"},
+            {"id": "식품/건강", "name": "식품/건강", "icon": "🍎"},
+            {"id": "가구/인테리어", "name": "가구/인테리어", "icon": "🏠"},
+            {"id": "게임/취미", "name": "게임/취미", "icon": "🎮"},
+            {"id": "기타", "name": "기타", "icon": "📦"},
+        ]
+    }
+
+
+# 검색 API (FTS5)
+@app.get("/api/search")
+async def search(
+    q: str = Query(default="", min_length=1),
+    category: str = "all",
+    price_range: str = Query(
+        default="all", regex="^(all|0-5만|5-10만|10-20만|20만\\+)$"
+    ),
+    shipping_free: bool = False,
+    sort: str = Query(default="latest", regex="^(latest|oldest)$"),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    from sqlalchemy import text
+
+    query = db.query(HotDeal)
+
+    if q:
+        query = query.filter(HotDeal.title.like(f"%{q}%"))
+
+    if category != "all":
+        query = query.filter(HotDeal.category == category)
+
+    if shipping_free:
+        query = query.filter(HotDeal.shipping.like("%무료%"))
+
+    all_deals = query.all()
+
+    if price_range != "all":
+        filtered_deals = []
+        for deal in all_deals:
+            price_num = parse_price_to_number(deal.price)
+            if price_range == "0-5만" and 0 < price_num <= 50000:
+                filtered_deals.append(deal)
+            elif price_range == "5-10만" and 50000 < price_num <= 100000:
+                filtered_deals.append(deal)
+            elif price_range == "10-20만" and 100000 < price_num <= 200000:
+                filtered_deals.append(deal)
+            elif price_range == "20만+" and price_num > 200000:
+                filtered_deals.append(deal)
+        all_deals = filtered_deals
+
+    total = len(all_deals)
+
+    if sort == "oldest":
+        all_deals.sort(key=lambda x: x.created_at)
+    else:
+        all_deals.sort(key=lambda x: x.created_at, reverse=True)
+
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    offset = (page - 1) * per_page
+    paginated_deals = all_deals[offset : offset + per_page]
+
+    return {
+        "deals": [deal.to_dict() for deal in paginated_deals],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": total_pages,
+        },
+        "query": q,
+    }
+
+
+# 댓글 목록 API
+@app.get("/api/deals/{deal_id}/comments")
+async def get_comments(deal_id: int, db: Session = Depends(get_db)):
+    comments = (
+        db.query(Comment)
+        .filter(Comment.deal_id == deal_id)
+        .order_by(Comment.created_at.desc())
+        .all()
+    )
+    return {"comments": [c.to_dict() for c in comments]}
+
+
+# 댓글 작성 API
+@app.post("/api/deals/{deal_id}/comments")
+async def create_comment(
+    deal_id: int,
+    content: str = Body(..., min_length=1, max_length=500),
+    x_access_token: str | None = Header(default=None, alias="X-Access-Token"),
+    db: Session = Depends(get_db),
+):
+    user = None
+    if x_access_token:
+        try:
+            payload = decode_token(x_access_token)
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+        except Exception:
+            pass
+
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    deal = db.query(HotDeal).filter(HotDeal.id == deal_id).first()
+    if not deal:
+        raise HTTPException(status_code=404, detail="딜을 찾을 수 없습니다")
+
+    comment = Comment(
+        deal_id=deal_id,
+        user_id=str(user.id),
+        author_name=user.username,
+        content=content,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+
+    return {"comment": comment.to_dict()}
+
+
+# 댓글 삭제 API
+@app.delete("/api/comments/{comment_id}")
+async def delete_comment(
+    comment_id: int,
+    x_access_token: str | None = Header(default=None, alias="X-Access-Token"),
+    db: Session = Depends(get_db),
+):
+    user = None
+    if x_access_token:
+        try:
+            payload = decode_token(x_access_token)
+            user_id = payload.get("sub")
+            if user_id:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+        except Exception:
+            pass
+
+    if not user:
+        raise HTTPException(status_code=401, detail="로그인이 필요합니다")
+
+    comment = db.query(Comment).filter(Comment.id == comment_id).first()
+    if not comment:
+        raise HTTPException(status_code=404, detail="댓글을 찾을 수 없습니다")
+
+    if comment.user_id != str(user.id):
+        raise HTTPException(status_code=403, detail="본인 댓글만 삭제할 수 있습니다")
+
+    db.delete(comment)
+    db.commit()
+
+    return {"status": "삭제 완료"}
+
+
+# Telegram Bot 설정 API
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+
+
+@app.get("/api/telegram/verify")
+async def verify_telegram(token: str = Query(...)):
+    if not TELEGRAM_BOT_TOKEN:
+        raise HTTPException(
+            status_code=500, detail="Telegram Bot이 설정되지 않았습니다"
+        )
+
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getMe",
+                timeout=10.0,
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("ok"):
+                    return {
+                        "status": "ok",
+                        "bot_name": data["result"]["username"],
+                    }
+        except Exception:
+            pass
+    raise HTTPException(status_code=400, detail="Telegram Bot 연결 실패")
+
+
+@app.post("/api/telegram/register")
+async def register_telegram(
+    chat_id: str = Body(...),
+    categories: List[str] = Body(default=[]),
+    keywords: List[str] = Body(default=[]),
+    db: Session = Depends(get_db),
+):
+    if not TELEGRAM_BOT_TOKEN:
+        raise HTTPException(
+            status_code=500, detail="Telegram Bot이 설정되지 않았습니다"
+        )
+
+    existing = db.query(TelegramUser).filter(TelegramUser.chat_id == chat_id).first()
+    if existing:
+        existing.categories = categories
+        existing.keywords = keywords
+        existing.is_active = True
+        db.commit()
+        db.refresh(existing)
+        return {"status": "updated", "user": existing.to_dict()}
+
+    telegram_user = TelegramUser(
+        chat_id=chat_id,
+        categories=categories,
+        keywords=keywords,
+    )
+    db.add(telegram_user)
+    db.commit()
+    db.refresh(telegram_user)
+
+    return {"status": "registered", "user": telegram_user.to_dict()}
+
+
+@app.get("/api/telegram/status")
+async def get_telegram_status(
+    chat_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    user = db.query(TelegramUser).filter(TelegramUser.chat_id == chat_id).first()
+    if not user:
+        return {"is_registered": False}
+    return {
+        "is_registered": True,
+        "is_active": user.is_active,
+        "categories": user.categories,
+        "keywords": user.keywords,
+    }
+
+
+async def send_telegram_notification(deal: dict):
+    """새 딜 등록 시 Telegram 알림 발송"""
+    if not TELEGRAM_BOT_TOKEN:
+        return
+
+    db = SessionLocal()
+    try:
+        telegram_users = (
+            db.query(TelegramUser).filter(TelegramUser.is_active == True).all()
+        )
+
+        deal_category = deal.get("category", "")
+        deal_title = deal.get("title", "")
+
+        for user in telegram_users:
+            should_send = False
+
+            if user.categories and deal_category in (user.categories or []):
+                should_send = True
+
+            if user.keywords:
+                for keyword in user.keywords or []:
+                    if keyword.lower() in deal_title.lower():
+                        should_send = True
+                        break
+
+            if not should_send:
+                continue
+
+            message = (
+                f"🔥 [{deal_category}]\n"
+                f"{deal_title}\n"
+                f"💰 {deal.get('price', '가격 없음')} | {deal.get('shipping', '배송정보없음')}\n"
+                f"📍 {deal.get('source', '출처')}\n"
+                f"🔗 {deal.get('link', '')}"
+            )
+
+            try:
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+                        json={"chat_id": user.chat_id, "text": message},
+                        timeout=10.0,
+                    )
+            except Exception as e:
+                logger.warning(f"Telegram 메시지 발송 실패: {e}")
+    finally:
+        db.close()
 
 
 # 수동 크롤링 API (테스트용)
