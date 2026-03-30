@@ -197,6 +197,75 @@ document.addEventListener('DOMContentLoaded', () => {
     window.resetFilters = () => { f1.value=f2.value='all'; f3.checked=false; f4.value='latest'; apply(); };
 
     fetchDeals('all', 1);
+
+    let pullStartY = 0;
+    let pullCurrentY = 0;
+    let isPulling = false;
+    let pullIndicator = null;
+
+    const createPullIndicator = () => {
+        if (pullIndicator) return;
+        pullIndicator = document.createElement('div');
+        pullIndicator.id = 'pull-indicator';
+        pullIndicator.className = 'fixed top-0 left-0 right-0 z-50 flex justify-center items-center py-2 bg-purple-600 text-white text-sm font-medium transition-transform duration-200 -translate-y-full';
+        pullIndicator.innerHTML = '<span class="mr-2">↓</span> 당겨서 새로고침';
+        document.body.appendChild(pullIndicator);
+    };
+
+    const updatePullIndicator = (offset) => {
+        if (!pullIndicator) return;
+        if (offset > 0) {
+            pullIndicator.style.transform = `translateY(${Math.min(offset, 80)}px)`;
+            pullIndicator.classList.toggle('bg-purple-600', offset < 80);
+            pullIndicator.classList.toggle('bg-green-500', offset >= 80);
+            pullIndicator.querySelector('span').textContent = offset >= 80 ? '↻放手刷新' : '↓';
+        }
+    };
+
+    const resetPullIndicator = () => {
+        if (!pullIndicator) return;
+        pullIndicator.style.transform = '-translate-y-full';
+    };
+
+    document.addEventListener('touchstart', (e) => {
+        if (window.scrollY === 0) {
+            pullStartY = e.touches[0].clientY;
+            isPulling = true;
+            createPullIndicator();
+        }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+        if (!isPulling) return;
+        pullCurrentY = e.touches[0].clientY;
+        const pullDiff = pullCurrentY - pullStartY;
+        if (pullDiff > 0) {
+            e.preventDefault();
+            updatePullIndicator(pullDiff);
+        }
+    }, { passive: false });
+
+    document.addEventListener('touchend', () => {
+        if (!isPulling) return;
+        const pullDiff = pullCurrentY - pullStartY;
+        if (pullDiff >= 80) {
+            pullIndicator.style.transition = 'transform 0.3s ease';
+            pullIndicator.style.transform = 'translateY(0)';
+            pullIndicator.querySelector('span').textContent = '↻';
+            pullIndicator.querySelector('span').classList.add('animate-spin');
+            fetchDeals(source, 1);
+            setTimeout(() => {
+                resetPullIndicator();
+                pullIndicator.style.transition = 'transform 0.2s ease';
+                if (pullIndicator) pullIndicator.querySelector('span').classList.remove('animate-spin');
+            }, 1000);
+        } else {
+            resetPullIndicator();
+        }
+        isPulling = false;
+        pullStartY = 0;
+        pullCurrentY = 0;
+    }, { passive: true });
 });
 
 async function performAiSearch() {

@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from models import User, SessionLocal
 import os
 
-# .env 파일 로드 (로컬 개발용, 배포 환경에서는 무시됨)
 try:
     from dotenv import load_dotenv
 
@@ -16,16 +15,17 @@ try:
 except:
     pass
 
-# SECRET_KEY 가져오기 (환경변수에서 직접)
+IS_PRODUCTION = os.getenv("APP_ENV") == "production"
 SECRET_KEY = os.getenv("SECRET_KEY")
 
-# Railway 환경에서는 에러 메시지만 출력하고 계속 진행
 if not SECRET_KEY:
-    print("⚠️ WARNING: SECRET_KEY가 설정되지 않았습니다. 기본값을 사용합니다.")
+    if IS_PRODUCTION:
+        raise RuntimeError(
+            "FATAL: SECRET_KEY 환경변수가 설정되지 않았습니다. 프로덕션 환경에서는 반드시 필요합니다."
+        )
+    print("⚠️ WARNING: SECRET_KEY가 설정되지 않았습니다. 개발용 임시 키를 사용합니다.")
     print("⚠️ 프로덕션 환경에서는 반드시 SECRET_KEY 환경변수를 설정하세요!")
-    SECRET_KEY = (
-        "temporary-secret-key-please-change-in-production-" + os.urandom(16).hex()
-    )
+    SECRET_KEY = "dev-only-temporary-key-" + os.urandom(8).hex()
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7일

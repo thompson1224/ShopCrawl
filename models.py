@@ -305,6 +305,7 @@ class HotDeal(Base):
     source = Column(String, index=True)
     author = Column(String)
     price = Column(String)
+    price_value = Column(Integer, default=0)
     shipping = Column(String)
     link = Column(String, unique=True, index=True)
     thumbnail = Column(String)
@@ -317,9 +318,21 @@ class HotDeal(Base):
         "Comment", back_populates="deal", cascade="all, delete-orphan"
     )
 
+    bookmarks = relationship(
+        "Bookmark", back_populates="deal", cascade="all, delete-orphan"
+    )
+
+    price_history = relationship(
+        "PriceHistory", back_populates="deal", cascade="all, delete-orphan"
+    )
+
     __table_args__ = (
         Index("ix_hotdeals_source_created", "source", "created_at"),
         Index("ix_hotdeals_created", "created_at"),
+        Index("ix_hotdeals_category", "category"),
+        Index("ix_hotdeals_source_category", "source", "category"),
+        Index("ix_hotdeals_shipping", "shipping"),
+        Index("ix_hotdeals_price_value", "price_value"),
     )
 
     def to_dict(self):
@@ -329,6 +342,7 @@ class HotDeal(Base):
             "source": self.source,
             "author": self.author,
             "price": self.price,
+            "price_value": self.price_value,
             "shipping": self.shipping,
             "link": self.link,
             "thumbnail": self.thumbnail,
@@ -398,6 +412,62 @@ class RuliwebThumbnail(Base):
     )
 
 
+class Bookmark(Base):
+    __tablename__ = "bookmarks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String(100), nullable=False, index=True)
+    deal_id = Column(
+        Integer, ForeignKey("hotdeals.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at = Column(
+        DateTime, default=lambda: datetime.now(KST).replace(tzinfo=None)
+    )
+
+    deal = relationship("HotDeal", back_populates="bookmarks")
+
+    __table_args__ = (
+        Index("ix_bookmarks_user_deal", "user_id", "deal_id", unique=True),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "deal_id": self.deal_id,
+            "created_at": self.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+
+class PriceHistory(Base):
+    __tablename__ = "price_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    deal_id = Column(
+        Integer, ForeignKey("hotdeals.id", ondelete="CASCADE"), nullable=False
+    )
+    price = Column(String, nullable=False)
+    price_value = Column(Integer, default=0)
+    recorded_at = Column(
+        DateTime, default=lambda: datetime.now(KST).replace(tzinfo=None)
+    )
+
+    deal = relationship("HotDeal", back_populates="price_history")
+
+    __table_args__ = (
+        Index("ix_price_history_deal_recorded", "deal_id", "recorded_at"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "deal_id": self.deal_id,
+            "price": self.price,
+            "price_value": self.price_value,
+            "recorded_at": self.recorded_at.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+
 def classify_category(title: str) -> str:
     """제목 키워드 매칭으로 카테고리 분류"""
     title_lower = title.lower()
@@ -439,32 +509,37 @@ def ensure_sqlite_schema(engine):
 
         if "category" not in columns:
             conn.execute(
-                text(
-                    "ALTER TABLE hotdeals ADD COLUMN category VARCHAR DEFAULT '기타'"
-                )
+                text("ALTER TABLE hotdeals ADD COLUMN category VARCHAR DEFAULT '기타'")
             )
             conn.execute(
                 text("UPDATE hotdeals SET category = '기타' WHERE category IS NULL")
+            )
+
+        if "price_value" not in columns:
+            conn.execute(
+                text("ALTER TABLE hotdeals ADD COLUMN price_value INTEGER DEFAULT 0")
+            )
+            conn.execute(
+                text("UPDATE hotdeals SET price_value = 0 WHERE price_value IS NULL")
             )
 
         indexes = {
             row[1]
             for row in conn.execute(text("PRAGMA index_list(hotdeals)")).fetchall()
         }
-        if "ix_hotdeals_source_created" not in indexes:
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS ix_hotdeals_source_created "
-                    "ON hotdeals (source, created_at)"
-                )
-            )
-        if "ix_hotdeals_created" not in indexes:
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS ix_hotdeals_created "
-                    "ON hotdeals (created_at)"
-                )
-            )
+
+        new_indexes = {
+            "ix_hotdeals_source_created": "CREATE INDEX IF NOT EXISTS ix_hotdeals_source_created ON hotdeals (source, created_at)",
+            "ix_hotdeals_created": "CREATE INDEX IF NOT EXISTS ix_hotdeals_created ON hotdeals (created_at)",
+            "ix_hotdeals_category": "CREATE INDEX IF NOT EXISTS ix_hotdeals_category ON hotdeals (category)",
+            "ix_hotdeals_source_category": "CREATE INDEX IF NOT EXISTS ix_hotdeals_source_category ON hotdeals (source, category)",
+            "ix_hotdeals_shipping": "CREATE INDEX IF NOT EXISTS ix_hotdeals_shipping ON hotdeals (shipping)",
+            "ix_hotdeals_price_value": "CREATE INDEX IF NOT EXISTS ix_hotdeals_price_value ON hotdeals (price_value)",
+        }
+
+        for idx_name, idx_sql in new_indexes.items():
+            if idx_name not in indexes:
+                conn.execute(text(idx_sql))
 
 
 if os.getenv("APP_ENV") == "production":
@@ -476,7 +551,12 @@ else:
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
 
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    pool_pre_ping=True,
+    pool_recycle=3600,
+    pool_size=10,
+    max_overflow=20,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
