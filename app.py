@@ -32,7 +32,7 @@ import os
 import re
 import time
 import httpx
-from typing import List
+from typing import List, Optional, Union, Any
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import Session
 from models import (
@@ -158,7 +158,7 @@ app.add_middleware(
 )
 
 
-def is_valid_admin_secret(candidate: str | None) -> bool:
+def is_valid_admin_secret(candidate: Optional[str]) -> bool:
     return (
         bool(ADMIN_SECRET)
         and bool(candidate)
@@ -166,7 +166,7 @@ def is_valid_admin_secret(candidate: str | None) -> bool:
     )
 
 
-def require_admin_access(secret: str = "", x_admin_secret: str | None = None) -> None:
+def require_admin_access(secret: str = "", x_admin_secret: Optional[str] = None) -> None:
     provided_secret = x_admin_secret or secret
     if not is_valid_admin_secret(provided_secret):
         raise HTTPException(status_code=403, detail="관리자 인증이 필요합니다")
@@ -436,37 +436,54 @@ async def scrape_ruliweb():
                         return ""
 
             if links_to_fetch:
+                unique_links_to_fetch = list(dict.fromkeys(links_to_fetch))
                 thumbnails = await asyncio.gather(
-                    *[
-                        fetch_og_image(d["link"])
-                        for d in deal_list
-                        if d["link"] in links_to_fetch
-                    ]
+                    *[fetch_og_image(link) for link in unique_links_to_fetch]
                 )
-                new_cached = []
-                for deal, thumb in zip(deal_list, thumbnails):
-                    if deal["link"] in links_to_fetch:
-                        deal["thumbnail"] = thumb
-                        if thumb:
-                            new_cached.append(
-                                RuliwebThumbnail(
-                                    link=deal["link"],
-                                    thumbnail_url=thumb,
-                                    fetched_at=datetime.now(KST).replace(tzinfo=None),
-                                )
-                            )
+                fetched_thumbnail_map = {
+                    link: thumb
+                    for link, thumb in zip(unique_links_to_fetch, thumbnails)
+                    if thumb
+                }
 
-                if new_cached:
+                for deal in deal_list:
+                    thumb = fetched_thumbnail_map.get(deal["link"])
+                    if thumb:
+                        deal["thumbnail"] = thumb
+
+                if fetched_thumbnail_map:
                     db = SessionLocal()
                     try:
-                        for cached in new_cached:
-                            existing = (
-                                db.query(RuliwebThumbnail)
-                                .filter(RuliwebThumbnail.link == cached.link)
-                                .first()
+                        existing_records = (
+                            db.query(RuliwebThumbnail)
+                            .filter(
+                                RuliwebThumbnail.link.in_(
+                                    list(fetched_thumbnail_map.keys())
+                                )
                             )
-                            if not existing:
-                                db.add(cached)
+                            .all()
+                        )
+                        existing_map = {
+                            record.link: record for record in existing_records
+                        }
+
+                        for link, thumb in fetched_thumbnail_map.items():
+                            existing = existing_map.get(link)
+                            if existing:
+                                existing.thumbnail_url = thumb
+                                existing.fetched_at = datetime.now(KST).replace(
+                                    tzinfo=None
+                                )
+                            else:
+                                db.add(
+                                    RuliwebThumbnail(
+                                        link=link,
+                                        thumbnail_url=thumb,
+                                        fetched_at=datetime.now(KST).replace(
+                                            tzinfo=None
+                                        ),
+                                    )
+                                )
                         db.commit()
                     except Exception as e:
                         logger.warning(f"루리웹 썸네일 캐시 저장 오류: {e}")
@@ -1256,7 +1273,7 @@ async def get_comments(deal_id: int, db: Session = Depends(get_db)):
 async def create_comment(
     deal_id: int,
     content: str = Body(..., min_length=1, max_length=500),
-    x_access_token: str | None = Header(default=None, alias="X-Access-Token"),
+    x_access_token: Optional[str] = Header(default=None, alias="X-Access-Token"),
     db: Session = Depends(get_db),
 ):
     user = None
@@ -1293,7 +1310,7 @@ async def create_comment(
 @app.delete("/api/comments/{comment_id}")
 async def delete_comment(
     comment_id: int,
-    x_access_token: str | None = Header(default=None, alias="X-Access-Token"),
+    x_access_token: Optional[str] = Header(default=None, alias="X-Access-Token"),
     db: Session = Depends(get_db),
 ):
     user = None
@@ -1456,7 +1473,7 @@ async def send_telegram_notification(deal: dict):
 async def manual_crawl(
     request: Request,
     secret: str = "",
-    x_admin_secret: str | None = Header(default=None, alias="X-Admin-Secret"),
+    x_admin_secret: Optional[str] = Header(default=None, alias="X-Admin-Secret"),
 ):
     require_admin_access(secret=secret, x_admin_secret=x_admin_secret)
     logger.info("수동 크롤링 요청")
@@ -1618,7 +1635,7 @@ async def logout():
 @app.get("/api/debug/models")
 async def list_available_models(
     secret: str = "",
-    x_admin_secret: str | None = Header(default=None, alias="X-Admin-Secret"),
+    x_admin_secret: Optional[str] = Header(default=None, alias="X-Admin-Secret"),
 ):
     require_admin_access(secret=secret, x_admin_secret=x_admin_secret)
     if not GOOGLE_API_KEY:
@@ -1802,7 +1819,7 @@ async def get_me(current_user: User = Depends(get_current_user_required)):
 @app.get("/api/admin/sync-rag")
 async def sync_rag_manually(
     secret: str = "",
-    x_admin_secret: str | None = Header(default=None, alias="X-Admin-Secret"),
+    x_admin_secret: Optional[str] = Header(default=None, alias="X-Admin-Secret"),
     db: Session = Depends(get_db),
 ):
     """기존 DB의 데이터를 벡터 DB로 강제 이식"""

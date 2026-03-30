@@ -36,7 +36,16 @@
             -webkit-tap-highlight-color: transparent;
             -webkit-font-smoothing: antialiased;
             overflow-x: hidden;
+            padding-bottom: env(safe-area-inset-bottom);
         }
+
+        /* 하단 탭 바 패딩 */
+        @media (max-width: 640px) {
+            body {
+                padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+            }
+        }
+        
         .source-btn.active { 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white; 
@@ -102,7 +111,6 @@
                 padding-left: max(0.5rem, env(safe-area-inset-left));
                 padding-right: max(0.5rem, env(safe-area-inset-right));
             }
-            }
             .container {
                 width: 100%;
                 padding: 0;
@@ -115,26 +123,6 @@
             }
             .text-3xl {
                 font-size: 1.5rem;
-            }
-            /* 핫딜 카드 모바일 최적화 */
-            .hotdeal-card {
-                padding: 0.75rem;
-            }
-            .hotdeal-thumb {
-                width: 5rem;
-                height: 5rem;
-                flex-shrink: 0;
-            }
-            .hotdeal-title {
-                font-size: 0.9rem;
-                line-height: 1.3;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-                overflow: hidden;
-            }
-            .hotdeal-price {
-                font-size: 1rem;
             }
             /* 페이지네이션 버튼 확대 */
             .page-btn {
@@ -222,10 +210,51 @@
             padding-left: max(0.75rem, env(safe-area-inset-left));
             padding-right: max(0.75rem, env(safe-area-inset-right));
         }
-    </style>
-</head>
-<body>
-    <div class="container mx-auto max-w-4xl">
+
+        /* Toast 애니메이션 */
+        @keyframes toast-in {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .toast-container {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            pointer-events: none;
+        }
+        .toast {
+            pointer-events: auto;
+            animation: toast-in 0.3s ease-out;
+            min-width: 250px;
+            max-width: 90vw;
+        }
+
+        /* 스켈레톤 로딩 애니메이션 */
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .skeleton {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite linear;
+        }
+        .dark .skeleton {
+            background: linear-gradient(90deg, #2d3748 25%, #4a5568 50%, #2d3748 75%);
+            background-size: 200% 100%;
+        }
+        </style>
+        </head>
+        <body>
+        <!-- Toast 컨테이너 -->
+        <div id="toast-container" class="toast-container"></div>
+
+        <div class="container mx-auto max-w-7xl">
         <!-- 헤더 -->
         <div class="glass-morphism rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-xl">
             <div class="flex flex-col gap-3">
@@ -395,8 +424,8 @@
         </div>
         
         <!-- 핫딜 리스트 -->
-        <div id="hotdeal-list" class="space-y-3">
-            <div class="glass-morphism p-6 text-center rounded-2xl shadow-lg">
+        <div id="hotdeal-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div class="glass-morphism p-6 text-center rounded-2xl shadow-lg col-span-full">
                 <div class="flex justify-center gap-1 mb-2">
                     <span class="paw-print">🐾</span>
                     <span class="paw-print">🐾</span>
@@ -600,7 +629,7 @@
             const chatId = chatIdInput.value.trim();
             
             if (!chatId) {
-                alert('Telegram Chat ID를 입력해주세요.');
+                showToast('Telegram Chat ID를 입력해주세요.', 'info');
                 return;
             }
             
@@ -620,13 +649,13 @@
                 });
                 
                 if (response.ok) {
-                    alert('Telegram 알림이 설정되었습니다!');
+                    showToast('Telegram 알림이 설정되었습니다!', 'success');
                     closeTelegramModal();
                 } else {
-                    alert('설정에 실패했습니다.');
+                    showToast('설정에 실패했습니다.', 'error');
                 }
             } catch (error) {
-                alert('설정에 실패했습니다.');
+                showToast('설정에 실패했습니다.', 'error');
             }
         }
         

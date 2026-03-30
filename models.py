@@ -427,6 +427,46 @@ def create_fts_table(engine):
         conn.commit()
 
 
+def ensure_sqlite_schema(engine):
+    """기존 SQLite 파일을 최신 모델 스키마에 맞게 보정"""
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        columns = {
+            row[1]
+            for row in conn.execute(text("PRAGMA table_info(hotdeals)")).fetchall()
+        }
+
+        if "category" not in columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE hotdeals ADD COLUMN category VARCHAR DEFAULT '기타'"
+                )
+            )
+            conn.execute(
+                text("UPDATE hotdeals SET category = '기타' WHERE category IS NULL")
+            )
+
+        indexes = {
+            row[1]
+            for row in conn.execute(text("PRAGMA index_list(hotdeals)")).fetchall()
+        }
+        if "ix_hotdeals_source_created" not in indexes:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_hotdeals_source_created "
+                    "ON hotdeals (source, created_at)"
+                )
+            )
+        if "ix_hotdeals_created" not in indexes:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_hotdeals_created "
+                    "ON hotdeals (created_at)"
+                )
+            )
+
+
 if os.getenv("APP_ENV") == "production":
     db_path = "/data/hotdeals.db"
 else:
@@ -441,4 +481,5 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base.metadata.create_all(bind=engine)
+ensure_sqlite_schema(engine)
 create_fts_table(engine)

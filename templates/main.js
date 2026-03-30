@@ -1,37 +1,22 @@
 function sanitizeExternalUrl(value) {
     if (!value) return '#';
-
     try {
         const parsed = new URL(value, window.location.origin);
-        if (!['http:', 'https:'].includes(parsed.protocol)) {
-            return '#';
-        }
-        return parsed.href;
-    } catch {
-        return '#';
-    }
+        return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '#';
+    } catch { return '#'; }
 }
 
 function toggleDarkMode() {
     const html = document.documentElement;
     const isDark = html.classList.contains('dark');
-    
-    if (isDark) {
-        html.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
-    } else {
-        html.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
-    }
+    html.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'light' : 'dark');
 }
 
 function initDarkMode() {
     const savedTheme = localStorage.getItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
-    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-        document.documentElement.classList.add('dark');
-    }
+    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) document.documentElement.classList.add('dark');
 }
 
 function createFallbackThumbnail() {
@@ -46,12 +31,8 @@ function appendInlineMarkdown(container, text) {
     const pattern = /(\*\*(.+?)\*\*|\[(.+?)\]\((.+?)\))/g;
     let lastIndex = 0;
     let match;
-
     while ((match = pattern.exec(text)) !== null) {
-        if (match.index > lastIndex) {
-            container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
-        }
-
+        if (match.index > lastIndex) container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
         if (match[2] !== undefined) {
             const strong = document.createElement('strong');
             strong.textContent = match[2];
@@ -59,613 +40,213 @@ function appendInlineMarkdown(container, text) {
         } else {
             const link = document.createElement('a');
             link.href = sanitizeExternalUrl(match[4]);
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
+            link.target = '_blank'; link.rel = 'noopener noreferrer';
             link.className = 'text-purple-600 font-bold underline hover:text-purple-800';
             link.textContent = `${match[3]} 🔗`;
             container.appendChild(link);
         }
-
         lastIndex = pattern.lastIndex;
     }
-
-    if (lastIndex < text.length) {
-        container.appendChild(document.createTextNode(text.slice(lastIndex)));
-    }
+    if (lastIndex < text.length) container.appendChild(document.createTextNode(text.slice(lastIndex)));
 }
 
 function renderAiAnswer(container, answer) {
     container.replaceChildren();
-
     String(answer || '').split('\n').forEach((line, index) => {
-        if (index > 0) {
-            container.appendChild(document.createElement('br'));
-        }
-
+        if (index > 0) container.appendChild(document.createElement('br'));
         const normalizedLine = line.startsWith('* ') ? `• ${line.slice(2)}` : line;
         appendInlineMarkdown(container, normalizedLine);
     });
 }
 
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    const toast = document.createElement('div');
+    const bgClass = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-green-500' : 'bg-gray-800/90');
+    toast.className = `toast px-6 py-3 rounded-2xl text-white font-medium shadow-2xl backdrop-blur-md ${bgClass} flex items-center gap-2`;
+    toast.innerHTML = `<span>${type==='error'?'❌':type==='success'?'✅':'🔔'}</span><span class="text-sm">${message}</span>`;
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = '0'; toast.style.transform = 'translateY(10px)'; toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+function getElement(id) {
+    return document.getElementById(id);
+}
+
+function createSkeletonCard() {
+    const card = document.createElement('div');
+    card.className = 'glass-morphism rounded-2xl shadow-lg overflow-hidden flex flex-row sm:flex-col h-full bg-white dark:bg-gray-800';
+    card.innerHTML = `<div class="w-28 sm:w-full sm:aspect-video skeleton"></div><div class="flex-1 p-3 sm:p-4 space-y-3"><div class="flex gap-2"><div class="h-4 w-12 skeleton rounded-md"></div><div class="h-4 w-16 skeleton rounded-md ml-auto"></div></div><div class="h-5 w-full skeleton rounded-md"></div><div class="h-5 w-3/4 skeleton rounded-md"></div><div class="pt-2 border-t border-gray-100 dark:border-gray-700/50 flex justify-between"><div class="h-6 w-24 skeleton rounded-md"></div><div class="h-6 w-6 skeleton rounded-full"></div></div></div>`;
+    return card;
+}
+
+const getTimeAgo = (dateString) => {
+    const diffMs = new Date() - new Date(dateString);
+    const m = Math.floor(diffMs / 60000), h = Math.floor(diffMs / 3600000), d = Math.floor(diffMs / 86400000);
+    if (m < 1) return '방금 전'; if (m < 60) return `${m}분 전`; if (h < 24) return `${h}시간 전`; if (d < 7) return `${d}일 전`;
+    return new Date(dateString).toLocaleDateString('ko-KR');
+};
+
+function createDealCard(deal) {
+    const safeLink = sanitizeExternalUrl(deal.link), safeThumb = sanitizeExternalUrl(deal.thumbnail);
+    const card = document.createElement('div'); card.className = 'relative h-full';
+    const link = document.createElement('a'); link.href = safeLink; link.target = '_blank'; link.rel = 'noopener noreferrer';
+    link.className = 'block glass-morphism rounded-2xl shadow-lg hover:shadow-xl group overflow-hidden flex flex-row sm:flex-col h-full bg-white dark:bg-gray-800 transition-all duration-300';
+    
+    let thumbHtml = safeThumb !== '#' ? `<img src="/image-proxy?url=${encodeURIComponent(safeThumb)}&source=${encodeURIComponent(deal.source)}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%25%22 height=%22100%25%22%3E%3Crect width=%22100%25%22 height=%22100%25%22 fill=%22%23eee%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2220%22%3E🖼️%3C/text%3E%3C/svg%3E'">` : `<div class="absolute inset-0 w-full h-full bg-gray-100 flex items-center justify-center text-xl">🖼️</div>`;
+
+    link.innerHTML = `<div class="w-28 sm:w-full sm:aspect-video flex-shrink-0 relative overflow-hidden bg-gray-50 dark:bg-gray-900 border-r sm:border-r-0 sm:border-b border-gray-100 dark:border-gray-700">${thumbHtml}</div><div class="flex-1 p-3 sm:p-4 flex flex-col justify-between min-w-0"><div class="top"><div class="flex items-center gap-1.5 text-[10px] sm:text-xs mb-2 flex-wrap"><span class="font-bold px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-md">${deal.source}</span><span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-md border border-gray-200 dark:border-gray-600">${deal.category||'기타'}</span><span class="text-gray-400 ml-auto">${getTimeAgo(deal.created_at)}</span></div><h2 class="font-bold text-gray-800 dark:text-gray-200 mb-2 text-sm sm:text-base leading-snug line-clamp-2">${deal.title}</h2></div><div class="bottom flex items-end justify-between gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700/50"><div class="flex flex-wrap items-baseline gap-1.5"><span class="font-extrabold text-lg sm:text-xl text-red-500 tracking-tight">${deal.price||'가격없음'}</span>${deal.shipping?`<span class="text-[10px] sm:text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">${deal.shipping}</span>`:''}</div></div></div>`;
+    
+    const commentBtn = document.createElement('button');
+    commentBtn.className = 'absolute top-2 right-2 p-2 bg-white/90 dark:bg-gray-800/90 rounded-full shadow-md text-purple-500 z-10';
+    commentBtn.innerHTML = '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"></path></svg>';
+    commentBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openCommentModal(deal.id, deal.title); };
+    card.appendChild(link); card.appendChild(commentBtn);
+    return card;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initDarkMode();
-    
-    const hotdealList = document.getElementById('hotdeal-list');
-    const sourceButtonsContainer = document.getElementById('source-buttons');
-    const paginationContainer = document.getElementById('pagination');
-    
-    let currentPage = 1;
-    let currentSource = 'all';
-    let totalPages = 1;
-    let currentPriceRange = 'all';
-    let currentCategory = 'all';
-    let currentShippingFree = false;
-    let currentSort = 'latest';
-    let filtersExpanded = false;
-    
-    // 필터 접기/펼치기 (모바일)
-    window.toggleFilters = () => {
-        const content = document.getElementById('filterContent');
-        const icon = document.getElementById('filterToggleIcon');
-        filtersExpanded = !filtersExpanded;
-        if (filtersExpanded) {
-            content.classList.remove('hidden');
-            icon.classList.remove('rotate-180');
+    const list = getElement('hotdeal-list');
+    const sBtns = getElement('source-buttons');
+    const pg = getElement('pagination');
+    const sentinel = getElement('infinite-scroll-sentinel');
+    if (!list || !sBtns || !pg) return;
+    let page = 1, source = 'all', total = 1, pr = 'all', cat = 'all', ship = false, sort = 'latest', loading = false;
+
+    const observer = new IntersectionObserver(es => { if(es[0].isIntersecting && !loading && page < total) fetchDeals(source, page + 1, true); }, { threshold: 0.1 });
+    if (sentinel) observer.observe(sentinel);
+
+    window.switchTab = t => {
+        const h = getElement('nav-home');
+        const a = getElement('nav-ai');
+        if (!h || !a) return;
+        if(t==='home') {
+            window.scrollTo({top:0, behavior:'smooth'});
+            h.className='flex flex-col items-center gap-1 text-purple-600';
+            a.className='flex flex-col items-center gap-1 text-gray-400';
+            showToast('홈 리스트다냥!');
         } else {
-            content.classList.add('hidden');
-            icon.classList.add('rotate-180');
+            const ai = getElement('aiSearchInput');
+            if(ai){
+                ai.scrollIntoView({behavior:'smooth',block:'center'});
+                ai.focus();
+            }
+            a.className='flex flex-col items-center gap-1 text-purple-600';
+            h.className='flex flex-col items-center gap-1 text-gray-400';
+            showToast('AI 딜냥이다냥! 🐱');
         }
     };
 
-    const fetchHotDeals = async (source = 'all', page = 1) => {
-        currentSource = source;
-        currentPage = page;
-        
-        hotdealList.innerHTML = `<div class="glass-morphism p-6 text-center rounded-xl shadow-lg"><div class="flex justify-center gap-1 mb-2"><span class="paw-print">🐾</span><span class="paw-print">🐾</span><span class="paw-print">🐾</span></div><p class="text-gray-500 text-sm">딜냥이가 핫딜을 물어오는 중...</p></div>`;
+    window.toggleFilters = () => {
+        const c = getElement('filterContent');
+        const i = getElement('filterToggleIcon');
+        if (!c || !i) return;
+        c.classList.toggle('hidden'); i.classList.toggle('rotate-180');
+    };
 
-        const params = new URLSearchParams({
-            source: source,
-            page: page,
-            per_page: 20,
-            price_range: currentPriceRange,
-            category: currentCategory,
-            shipping_free: currentShippingFree,
-            sort: currentSort
-        });
-        const backendUrl = `/api/hotdeals?${params.toString()}`;
+    window.toggleProfileMenu = () => {
+        const d = document.querySelector('.profile-dropdown');
+        if (!d) return;
+        d.style.display = d.style.display === 'block' ? 'none' : 'block';
+    };
 
+    const fetchDeals = async (s = 'all', p = 1, append = false) => {
+        if(loading) return; loading = true; source = s; page = p;
+        if(!append) { list.innerHTML = ''; for(let i=0;i<8;i++) list.appendChild(createSkeletonCard()); }
+        const ps = new URLSearchParams({source:s, page:p, per_page:20, price_range:pr, category:cat, shipping_free:ship, sort:sort});
         try {
-            const response = await fetch(backendUrl);
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            const data = await response.json();
-            
-            let deals, pagination;
-            
-            if (Array.isArray(data)) {
-                deals = data;
-                pagination = { page: 1, per_page: data.length, total: data.length, total_pages: 1 };
-            } else if (data.deals && Array.isArray(data.deals)) {
-                deals = data.deals;
-                pagination = data.pagination;
-            } else {
-                console.error('잘못된 API 응답:', data);
-                throw new Error('잘못된 API 응답 형식');
-            }
-            
-            totalPages = pagination.total_pages;
-            hotdealList.innerHTML = '';
-
-            if (deals.length === 0) {
-                hotdealList.innerHTML = '<div class="p-6 text-center text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 rounded-xl shadow"><span class="text-3xl">😿</span><p class="mt-2 text-sm">딜냥이가 핫딜을 찾지 못했어요!</p></div>';
-                paginationContainer.innerHTML = '';
-                return;
-            }
-            
-            deals.forEach(deal => {
-                const safeLink = sanitizeExternalUrl(deal.link);
-                const safeThumbnail = sanitizeExternalUrl(deal.thumbnail);
-
-                const cardContainer = document.createElement('div');
-                cardContainer.className = 'relative';
-
-                const linkContainer = document.createElement('a');
-                linkContainer.href = safeLink;
-                linkContainer.target = '_blank';
-                linkContainer.rel = 'noopener noreferrer';
-                linkContainer.className = 'block glass-morphism rounded-xl shadow-lg deal-item-container hotdeal-card';
-
-                const wrapper = document.createElement('div');
-                wrapper.className = 'flex gap-3';
-
-                const thumbnailWrapper = document.createElement('div');
-                thumbnailWrapper.className = 'flex-shrink-0 hotdeal-thumb';
-
-                if (safeThumbnail !== '#') {
-                    const image = document.createElement('img');
-                    image.src = `/image-proxy?url=${encodeURIComponent(safeThumbnail)}&source=${encodeURIComponent(deal.source)}`;
-                    image.alt = deal.title || '핫딜 이미지';
-                    image.className = 'w-full h-full object-cover rounded-lg border-2 border-gray-100 dark:border-gray-700 shadow-sm';
-                    image.onerror = () => {
-                        const fallback = createFallbackThumbnail();
-                        fallback.className += ' rounded-lg';
-                        image.replaceWith(fallback);
-                    };
-                    thumbnailWrapper.appendChild(image);
-                } else {
-                    thumbnailWrapper.appendChild(createFallbackThumbnail());
-                }
-
-                const content = document.createElement('div');
-                content.className = 'flex-1 min-w-0 flex flex-col justify-between';
-
-                const topSection = document.createElement('div');
-
-                const metaRow = document.createElement('div');
-                metaRow.className = 'flex items-center gap-1.5 text-[10px] sm:text-xs mb-1 flex-wrap';
-
-                const sourceBadge = document.createElement('span');
-                sourceBadge.className = 'font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full';
-                sourceBadge.textContent = deal.source;
-
-                const categoryBadge = document.createElement('span');
-                categoryBadge.className = 'px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full text-[10px]';
-                categoryBadge.textContent = deal.category || '기타';
-
-                const timeText = document.createElement('span');
-                timeText.className = 'text-gray-400';
-                timeText.textContent = getTimeAgo(deal.created_at);
-
-                metaRow.append(sourceBadge, categoryBadge, timeText);
-
-                const title = document.createElement('h2');
-                title.className = 'hotdeal-title font-bold text-gray-800 dark:text-gray-200 mb-1';
-                title.textContent = deal.title;
-
-                topSection.append(metaRow, title);
-                content.appendChild(topSection);
-
-                const bottomSection = document.createElement('div');
-                bottomSection.className = 'flex items-end justify-between gap-2 mt-1';
-
-                const priceRow = document.createElement('div');
-                priceRow.className = 'flex flex-wrap items-baseline gap-1';
-
-                const price = document.createElement('span');
-                price.className = 'hotdeal-price font-bold bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent';
-                price.textContent = deal.price || '가격 없음';
-                priceRow.appendChild(price);
-
-                if (deal.shipping) {
-                    const shipping = document.createElement('span');
-                    shipping.className = 'text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded';
-                    shipping.textContent = deal.shipping;
-                    priceRow.appendChild(shipping);
-                }
-
-                bottomSection.appendChild(priceRow);
-
-                const arrow = document.createElement('span');
-                arrow.className = 'text-gray-300 text-lg';
-                arrow.textContent = '→';
-                bottomSection.appendChild(arrow);
-
-                content.appendChild(bottomSection);
-                wrapper.appendChild(thumbnailWrapper);
-                wrapper.appendChild(content);
-                linkContainer.appendChild(wrapper);
-
-                // 댓글 버튼
-                const commentBtn = document.createElement('button');
-                commentBtn.className = 'absolute top-3 right-3 p-2 bg-white/80 dark:bg-gray-800/80 rounded-full shadow text-purple-500 hover:bg-purple-100 dark:hover:bg-purple-900 transition-colors';
-                commentBtn.innerHTML = '💬';
-                commentBtn.onclick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    openCommentModal(deal.id, deal.title);
-                };
-                cardContainer.appendChild(linkContainer);
-                cardContainer.appendChild(commentBtn);
-
-                hotdealList.appendChild(cardContainer);
-            });            
-            
-            renderPagination(pagination);
-            
-        } catch (error) {
-            console.error('핫딜 정보를 가져오는 중 오류 발생:', error);
-            hotdealList.innerHTML = `<div class="p-6 text-center text-red-500 bg-red-50 dark:bg-red-900/30 rounded-xl shadow"><span class="text-3xl">😾</span><p class="mt-2 text-sm">딜냥이가 넘어졌어요!<br>잠시 후 다시 시도해주세요.</p></div>`;
-        }
-    };
-    
-    // 시간 경과 표시 함수
-    const getTimeAgo = (dateString) => {
-        const now = new Date();
-        const past = new Date(dateString);
-        const diffMs = now - past;
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMs / 3600000);
-        const diffDays = Math.floor(diffMs / 86400000);
-        
-        if (diffMins < 1) return '방금 전';
-        if (diffMins < 60) return `${diffMins}분 전`;
-        if (diffHours < 24) return `${diffHours}시간 전`;
-        if (diffDays < 7) return `${diffDays}일 전`;
-        return past.toLocaleDateString('ko-KR');
-    };
-    
-    const renderPagination = (pagination) => {
-        paginationContainer.innerHTML = '';
-        
-        if (!pagination || pagination.total_pages <= 1) return;
-        
-        const paginationWrapper = document.createElement('div');
-        paginationWrapper.className = 'flex justify-center items-center space-x-1 mt-6 flex-wrap';
-        
-        if (currentPage > 1) {
-            const prevBtn = createPageButton('‹', currentPage - 1, '이전');
-            paginationWrapper.appendChild(prevBtn);
-        }
-        
-        const startPage = Math.max(1, currentPage - 2);
-        const endPage = Math.min(pagination.total_pages, currentPage + 2);
-        
-        if (startPage > 1) {
-            const firstBtn = createPageButton(1, 1);
-            paginationWrapper.appendChild(firstBtn);
-            if (startPage > 2) {
-                const dots = document.createElement('span');
-                dots.textContent = '...';
-                dots.className = 'px-1 text-gray-500 text-sm';
-                paginationWrapper.appendChild(dots);
-            }
-        }
-        
-        for (let i = startPage; i <= endPage; i++) {
-            const pageBtn = createPageButton(i, i, i === currentPage);
-            paginationWrapper.appendChild(pageBtn);
-        }
-        
-        if (endPage < pagination.total_pages) {
-            if (endPage < pagination.total_pages - 1) {
-                const dots = document.createElement('span');
-                dots.textContent = '...';
-                dots.className = 'px-1 text-gray-500 text-sm';
-                paginationWrapper.appendChild(dots);
-            }
-            const lastBtn = createPageButton(pagination.total_pages, pagination.total_pages);
-            paginationWrapper.appendChild(lastBtn);
-        }
-        
-        if (currentPage < pagination.total_pages) {
-            const nextBtn = createPageButton('›', currentPage + 1, '다음');
-            paginationWrapper.appendChild(nextBtn);
-        }
-        
-        paginationContainer.appendChild(paginationWrapper);
-    };
-    
-    const createPageButton = (text, page, ariaLabel = null) => {
-        const btn = document.createElement('button');
-        btn.textContent = text;
-        btn.className = `page-btn px-2 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-            ariaLabel === 'active' || text === currentPage
-                ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white shadow-md' 
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
-        }`;
-        if (ariaLabel) btn.setAttribute('aria-label', ariaLabel);
-        btn.onclick = () => fetchHotDeals(currentSource, page);
-        return btn;
+            const res = await fetch(`/api/hotdeals?${ps}`);
+            const data = await res.json();
+            const deals = data.deals || data;
+            total = data.pagination ? data.pagination.total_pages : 1;
+            if(!append) { list.innerHTML = ''; if(deals.length===0) { list.innerHTML = '<div class="col-span-full text-center p-10 bg-white rounded-xl shadow">😿 핫딜이 없다냥!</div>'; return; } }
+            deals.forEach(d => list.appendChild(createDealCard(d)));
+            renderPagination(data.pagination);
+        } catch(e) { console.error(e); if(!append) list.innerHTML = '에러났다냥 😿'; else showToast('추가 로딩 실패 😿', 'error'); }
+        finally { loading = false; }
     };
 
-    // 소스 버튼 이벤트 리스너
-    sourceButtonsContainer.addEventListener('click', (event) => {
-        const button = event.target.closest('button');
-        if (button) {
-            sourceButtonsContainer.querySelectorAll('.source-btn').forEach(btn => {
-                btn.classList.remove('active');
-                btn.classList.add('bg-white');
-            });
-            button.classList.add('active');
-            const selectedSource = button.dataset.source;
-            fetchHotDeals(selectedSource, 1);
-        }
+    const renderPagination = (p) => {
+        pg.innerHTML = ''; if(!p || p.total_pages <= 1) return;
+        const w = document.createElement('div'); w.className = 'flex justify-center gap-1 mt-6';
+        const btn = (t, v, active) => {
+            const b = document.createElement('button'); b.textContent = t;
+            b.className = `px-3 py-1.5 rounded-lg text-sm ${active?'bg-purple-600 text-white':'bg-white text-gray-700 border'}`;
+            b.onclick = () => fetchDeals(source, v); return b;
+        };
+        if(page > 1) w.appendChild(btn('‹', page-1));
+        for(let i=Math.max(1,page-2);i<=Math.min(p.total_pages,page+2);i++) w.appendChild(btn(i, i, i===page));
+        if(page < p.total_pages) w.appendChild(btn('›', page+1));
+        pg.appendChild(w);
+    };
+
+    sBtns.addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if(b) { sBtns.querySelectorAll('.source-btn').forEach(x=>x.classList.remove('active','bg-purple-600','text-white')); b.classList.add('active','bg-purple-600','text-white'); fetchDeals(b.dataset.source, 1); }
     });
 
-    // 필터 이벤트 리스너
-    const priceRangeFilter = document.getElementById('priceRangeFilter');
-    const categoryFilter = document.getElementById('categoryFilter');
-    const shippingFreeFilter = document.getElementById('shippingFreeFilter');
-    const sortOrder = document.getElementById('sortOrder');
+    const f1=getElement('priceRangeFilter'), f2=getElement('categoryFilter'), f3=getElement('shippingFreeFilter'), f4=getElement('sortOrder');
+    if (!f1 || !f2 || !f3 || !f4) return;
+    const apply = () => { pr=f1.value; cat=f2.value; ship=f3.checked; sort=f4.value; fetchDeals(source, 1); };
+    [f1,f2,f3,f4].forEach(x=>x.addEventListener('change', apply));
+    window.resetFilters = () => { f1.value=f2.value='all'; f3.checked=false; f4.value='latest'; apply(); };
 
-    const applyFilters = () => {
-        currentPriceRange = priceRangeFilter.value;
-        currentCategory = categoryFilter.value;
-        currentShippingFree = shippingFreeFilter.checked;
-        currentSort = sortOrder.value;
-        fetchHotDeals(currentSource, 1);
-    };
-
-    priceRangeFilter.addEventListener('change', applyFilters);
-    categoryFilter.addEventListener('change', applyFilters);
-    shippingFreeFilter.addEventListener('change', applyFilters);
-    sortOrder.addEventListener('change', applyFilters);
-
-    // 필터 초기화 함수
-    window.resetFilters = () => {
-        priceRangeFilter.value = 'all';
-        categoryFilter.value = 'all';
-        shippingFreeFilter.checked = false;
-        sortOrder.value = 'latest';
-        currentPriceRange = 'all';
-        currentCategory = 'all';
-        currentShippingFree = false;
-        currentSort = 'latest';
-        fetchHotDeals(currentSource, 1);
-    };
-
-    // 최초 로딩
-    fetchHotDeals('all', 1);
+    fetchDeals('all', 1);
 });
 
-// --- AI 검색 기능 ---
-
 async function performAiSearch() {
-    const input = document.getElementById('aiSearchInput');
-    const resultArea = document.getElementById('aiResultArea');
-    const loading = document.getElementById('aiLoading');
-    const answerBox = document.getElementById('aiAnswerBox');
-    const answerText = document.getElementById('aiAnswerText');
-    const sourceList = document.getElementById('aiSourceList');
-
-    const query = input.value.trim();
-    if (!query) {
-        alert('찾고 싶은 물건을 물어봐달라냥! 😺');
+    const i = getElement('aiSearchInput'), r = getElement('aiResultArea'), l = getElement('aiLoading'), ab = getElement('aiAnswerBox'), at = getElement('aiAnswerText'), sl = getElement('aiSourceList');
+    if (!i || !r || !l || !ab || !at || !sl) {
+        showToast('AI 검색 UI가 아직 준비되지 않았다냥.', 'info');
         return;
     }
-
-    // UI 초기화 및 로딩 시작
-    resultArea.classList.remove('hidden');
-    loading.classList.remove('hidden');
-    answerBox.classList.add('hidden');
-    sourceList.classList.add('hidden');
-    
-    // 기존 추천 목록 비우기 (제목 제외)
-    while (sourceList.children.length > 1) {
-        sourceList.removeChild(sourceList.lastChild);
-    }
-
+    const q = i.value.trim(); if(!q) { showToast('뭐 찾냐냥? 😺'); return; }
+    r.classList.remove('hidden'); l.classList.remove('hidden'); ab.classList.add('hidden');
     try {
-        // 백엔드 API 호출
-        const response = await fetch(`/api/search/ai?query=${encodeURIComponent(query)}`);
-        const data = await response.json();
-
-        // 로딩 끝
-        loading.classList.add('hidden');
-        answerBox.classList.remove('hidden');
-
-        // 답변 출력 (줄바꿈 처리)
-        renderAiAnswer(answerText, data.answer);
-
-        // 추천 상품 섹션 처리
-        const sourceSection = document.getElementById('aiSourceSection');
-        const sourceList = document.getElementById('aiSourceList');
-        const sourceCount = document.getElementById('aiSourceCount');
-        const toggleIcon = document.getElementById('aiToggleIcon');
-
-        // 기존 리스트 초기화
-        sourceList.innerHTML = '';
-
-        if (data.sources && data.sources.length > 0) {
-            sourceSection.classList.remove('hidden'); // 섹션 보이기
-            sourceList.classList.remove('hidden');    // 리스트 펼치기 (기본값)
-            toggleIcon.classList.remove('rotate-180'); // 아이콘 초기화
-            sourceCount.textContent = data.sources.length; // 개수 표시
-
-            data.sources.forEach(source => {
-                const card = document.createElement('a');
-                card.href = sanitizeExternalUrl(source.link);
-                card.target = '_blank';
-                card.rel = 'noopener noreferrer';
-                card.className = 'block bg-white p-3 rounded-lg shadow-sm border border-gray-100 hover:shadow-md hover:border-purple-200 transition-all flex items-center justify-between group';
-
-                const left = document.createElement('div');
-                left.className = 'flex items-center space-x-2 overflow-hidden';
-
-                const icon = document.createElement('span');
-                icon.className = 'text-lg';
-                icon.textContent = '🛍️';
-
-                const title = document.createElement('span');
-                title.className = 'text-sm text-gray-700 truncate group-hover:text-purple-600 transition-colors';
-                title.textContent = source.title;
-
-                const arrow = document.createElement('span');
-                arrow.className = 'w-4 h-4 text-gray-300 group-hover:text-purple-500';
-                arrow.textContent = '›';
-
-                left.append(icon, title);
-                card.append(left, arrow);
-                sourceList.appendChild(card);
+        const res = await fetch(`/api/search/ai?query=${encodeURIComponent(q)}`);
+        const d = await res.json();
+        l.classList.add('hidden'); ab.classList.remove('hidden'); renderAiAnswer(at, d.answer);
+        const sSec = getElement('aiSourceSection'), sc = getElement('aiSourceCount'), ti = getElement('aiToggleIcon');
+        if (!sSec || !sc || !ti) return;
+        sl.innerHTML = '';
+        if(d.sources && d.sources.length > 0) {
+            sSec.classList.remove('hidden'); sl.classList.remove('hidden'); ti.classList.remove('rotate-180'); sc.textContent = d.sources.length;
+            d.sources.forEach(s => {
+                const c = document.createElement('a'); c.href = sanitizeExternalUrl(s.link); c.target = '_blank'; c.className = 'block bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center';
+                c.innerHTML = `<div class="flex items-center gap-2 overflow-hidden"><span>🛍️</span><span class="text-sm truncate">${s.title}</span></div><span>›</span>`;
+                sl.appendChild(c);
             });
-        } else {
-            sourceSection.classList.add('hidden'); // 없으면 섹션 통째로 숨김
-        }
-
-    } catch (error) {
-        console.error('AI 검색 실패:', error);
-        loading.classList.add('hidden');
-        answerBox.classList.remove('hidden');
-        answerText.textContent = "지금 딜냥이가 너무 바빠서 대답할 수 없다냥... 😿 잠시 후에 다시 물어봐줘!";
-    }
+        } else sSec.classList.add('hidden');
+    } catch(e) { l.classList.add('hidden'); ab.classList.remove('hidden'); at.textContent = "에러났다냥 😿"; showToast('AI 검색 에러 😿', 'error'); }
 }
 
-// --- 일반 검색 기능 ---
 async function performSearch() {
-    const input = document.getElementById('searchInput');
-    const query = input.value.trim();
-    
-    if (!query) {
-        alert('검색어를 입력해주세요.');
-        return;
-    }
-    
-    const params = new URLSearchParams({
-        q: query,
-        source: 'all',
-        page: 1,
-        per_page: 50,
-        category: 'all',
-        price_range: 'all',
-        shipping_free: false,
-        sort: 'latest'
-    });
-    
-    const backendUrl = `/api/search?${params.toString()}`;
-    
+    const i = getElement('searchInput');
+    const l = getElement('hotdeal-list');
+    if(!i || !l) return;
+    const q = i.value.trim();
+    if(!q) { showToast('검색어 입력해라냥!'); return; }
     try {
-        const response = await fetch(backendUrl);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        const data = await response.json();
-        
-        if (data.deals && data.deals.length > 0) {
-            renderSearchResults(data.deals);
-        } else {
-            document.getElementById('hotdeal-list').innerHTML = 
-                '<div class="glass-morphism p-6 text-center rounded-xl shadow-lg"><span class="text-3xl">🔍</span><p class="mt-2 text-gray-500">검색 결과가 없습니다.</p></div>';
-        }
-    } catch (error) {
-        console.error('검색 실패:', error);
-        document.getElementById('hotdeal-list').innerHTML = 
-            '<div class="glass-morphism p-6 text-center rounded-xl shadow-lg"><span class="text-3xl">😾</span><p class="mt-2 text-red-500">검색 중 오류가 발생했습니다.</p></div>';
-    }
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&source=all&page=1&per_page=50`);
+        const d = await res.json();
+        l.innerHTML = '';
+        if(d.deals && d.deals.length > 0) {
+            d.deals.forEach(x => l.appendChild(createDealCard(x)));
+            const pagination = getElement('pagination');
+            if (pagination) pagination.innerHTML = '';
+        } else l.innerHTML = '<div class="col-span-full text-center p-10 bg-white rounded-xl shadow">🔍 결과 없다냥!</div>';
+    } catch(e) { showToast('검색 중 에러났다냥 😿', 'error'); }
 }
 
-function renderSearchResults(deals) {
-    const hotdealList = document.getElementById('hotdeal-list');
-    hotdealList.innerHTML = '';
-    
-    deals.forEach(deal => {
-        const safeLink = sanitizeExternalUrl(deal.link);
-        const safeThumbnail = sanitizeExternalUrl(deal.thumbnail);
-
-        const cardContainer = document.createElement('div');
-        cardContainer.className = 'relative';
-
-        const linkContainer = document.createElement('a');
-        linkContainer.href = safeLink;
-        linkContainer.target = '_blank';
-        linkContainer.rel = 'noopener noreferrer';
-        linkContainer.className = 'block glass-morphism rounded-xl shadow-lg deal-item-container hotdeal-card';
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'flex gap-3';
-
-        const thumbnailWrapper = document.createElement('div');
-        thumbnailWrapper.className = 'flex-shrink-0 hotdeal-thumb';
-
-        if (safeThumbnail !== '#') {
-            const image = document.createElement('img');
-            image.src = `/image-proxy?url=${encodeURIComponent(safeThumbnail)}&source=${encodeURIComponent(deal.source)}`;
-            image.alt = deal.title || '핫딜 이미지';
-            image.className = 'w-full h-full object-cover rounded-lg border-2 border-gray-100 dark:border-gray-700 shadow-sm';
-            image.onerror = () => {
-                const fallback = createFallbackThumbnail();
-                fallback.className += ' rounded-lg';
-                image.replaceWith(fallback);
-            };
-            thumbnailWrapper.appendChild(image);
-        } else {
-            thumbnailWrapper.appendChild(createFallbackThumbnail());
-        }
-
-        const content = document.createElement('div');
-        content.className = 'flex-1 min-w-0 flex flex-col justify-between';
-
-        const topSection = document.createElement('div');
-
-        const metaRow = document.createElement('div');
-        metaRow.className = 'flex items-center gap-1.5 text-[10px] sm:text-xs mb-1 flex-wrap';
-
-        const sourceBadge = document.createElement('span');
-        sourceBadge.className = 'font-bold px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-full';
-        sourceBadge.textContent = deal.source;
-
-        const categoryBadge = document.createElement('span');
-        categoryBadge.className = 'px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-full text-[10px]';
-        categoryBadge.textContent = deal.category || '기타';
-
-        const timeText = document.createElement('span');
-        timeText.className = 'text-gray-400';
-        timeText.textContent = getTimeAgo(deal.created_at);
-
-        metaRow.append(sourceBadge, categoryBadge, timeText);
-
-        const title = document.createElement('h2');
-        title.className = 'hotdeal-title font-bold text-gray-800 dark:text-gray-200 mb-1';
-        title.textContent = deal.title;
-
-        topSection.append(metaRow, title);
-        content.appendChild(topSection);
-
-        const bottomSection = document.createElement('div');
-        bottomSection.className = 'flex items-end justify-between gap-2 mt-1';
-
-        const priceRow = document.createElement('div');
-        priceRow.className = 'flex flex-wrap items-baseline gap-1';
-
-        const price = document.createElement('span');
-        price.className = 'hotdeal-price font-bold bg-gradient-to-r from-red-500 to-pink-500 bg-clip-text text-transparent';
-        price.textContent = deal.price || '가격 없음';
-        priceRow.appendChild(price);
-
-        if (deal.shipping) {
-            const shipping = document.createElement('span');
-            shipping.className = 'text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded';
-            shipping.textContent = deal.shipping;
-            priceRow.appendChild(shipping);
-        }
-
-        bottomSection.appendChild(priceRow);
-
-        const arrow = document.createElement('span');
-        arrow.className = 'text-gray-300 text-lg';
-        arrow.textContent = '→';
-        bottomSection.appendChild(arrow);
-
-        content.appendChild(bottomSection);
-        wrapper.appendChild(thumbnailWrapper);
-        wrapper.appendChild(content);
-        linkContainer.appendChild(wrapper);
-
-        const commentBtn = document.createElement('button');
-        commentBtn.className = 'absolute top-3 right-3 p-2 bg-white/80 dark:bg-gray-800/80 rounded-full shadow text-purple-500 hover:bg-purple-100 dark:hover:bg-purple-900 transition-colors';
-        commentBtn.innerHTML = '💬';
-        commentBtn.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            openCommentModal(deal.id, deal.title);
-        };
-        cardContainer.appendChild(linkContainer);
-        cardContainer.appendChild(commentBtn);
-
-        hotdealList.appendChild(cardContainer);
-    });
-    
-    document.getElementById('pagination').innerHTML = '';
-}
-
-// --- [추가] 리스트 토글 기능 ---
 function toggleAiSourceList() {
-    const list = document.getElementById('aiSourceList');
-    const icon = document.getElementById('aiToggleIcon');
-    
-    if (list.classList.contains('hidden')) {
-        // 펼치기
-        list.classList.remove('hidden');
-        icon.classList.remove('rotate-180');
-    } else {
-        // 접기
-        list.classList.add('hidden');
-        icon.classList.add('rotate-180');
-    }
+    const l = getElement('aiSourceList');
+    const i = getElement('aiToggleIcon');
+    if (!l || !i) return;
+    l.classList.toggle('hidden');
+    i.classList.toggle('rotate-180');
 }
