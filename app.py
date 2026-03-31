@@ -1198,8 +1198,7 @@ async def health_vectorstore():
 
 
 if __name__ == "__main__":
-    import sys
-
     port = int(os.getenv("PORT", 8000))
     logger.info(f"🚀 로컬 서버 시작: http://localhost:{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+    # Uvicorn reload mode requires an import string, not the app object itself.
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
