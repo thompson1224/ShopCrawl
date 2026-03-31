@@ -53,7 +53,13 @@ Oracle Cloud VPS production deploys failed in two separate ways on 2026-03-31. B
 1. Open Cloudflare Dashboard and select the `dealcat.co.kr` zone.
 2. Go to `Analytics & Logs` -> `Web Analytics`.
 3. Enable Web Analytics for the site.
-4. If Cloudflare asks for a script snippet, add it to `templates/index.html` before `</head>`.
+4. Because this site is proxied through Cloudflare, prefer the default automatic setup first.
+5. Only add a manual script snippet to `templates/index.html` if automatic injection is disabled or unavailable.
 5. Deploy once after the snippet change if manual injection is required.
 6. Confirm pageviews appear in Cloudflare after a few minutes.
 7. Keep this as the default traffic dashboard unless product-level funnel analysis becomes necessary.
+
+### Implementation Note
+- Do not patch `templates/index.html` yet.
+- Cloudflare documents that proxied sites use automatic setup by default.
+- Manual snippet insertion is only needed if the site is not proxied, automatic injection is disabled, or Cloudflare cannot modify the HTML response.
