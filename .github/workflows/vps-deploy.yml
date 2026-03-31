@@ -33,6 +33,17 @@ jobs:
             SECRET_KEY,NAVER_CLIENT_ID,NAVER_CLIENT_SECRET,GOOGLE_API_KEY,ADMIN_SECRET,BASE_URL
           script: |
             set -euo pipefail
+
+            on_error() {
+              echo "Deployment failed. Collecting diagnostics..."
+              sudo docker ps -a || true
+              sudo docker-compose -f docker-compose.production.yml ps || true
+              sudo docker-compose -f docker-compose.production.yml logs --tail=200 || true
+              curl -vfsS http://127.0.0.1:8000/health || true
+            }
+
+            trap on_error ERR
+
             cd /home/ubuntu/ShopCrawl
 
             sudo mkdir -p /opt/shopcrawl/data /opt/shopcrawl/chroma_db
@@ -59,3 +70,4 @@ jobs:
             sleep 10
             curl -fsS http://127.0.0.1:8000/health
             sudo docker image prune -f
+            trap - ERR
