@@ -54,7 +54,8 @@ jobs:
             BASE_URL=$BASE_URL
             ENDFILE
             
-            sudo docker-compose -f docker-compose.production.yml up -d --build --force-recreate
+            sudo docker-compose -f docker-compose.production.yml down --remove-orphans || true
+            sudo docker-compose -f docker-compose.production.yml up -d --build
             sleep 10
             curl -fsS http://127.0.0.1:8000/health
             sudo docker image prune -f
