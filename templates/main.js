@@ -99,13 +99,13 @@ function createDealCard(deal) {
     
     let thumbHtml = safeThumb !== '#' ? `<img src="/image-proxy?url=${encodeURIComponent(safeThumb)}&source=${encodeURIComponent(deal.source)}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%25%22 height=%22100%25%22%3E%3Crect width=%22100%25%22 height=%22100%25%22 fill=%22%23eee%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2220%22%3E🖼️%3C/text%3E%3C/svg%3E'">` : `<div class="absolute inset-0 w-full h-full bg-gray-100 flex items-center justify-center text-xl">🖼️</div>`;
 
-    link.innerHTML = `<div class="w-28 sm:w-full sm:aspect-video flex-shrink-0 relative overflow-hidden bg-gray-50 dark:bg-gray-900 border-r sm:border-r-0 sm:border-b border-gray-100 dark:border-gray-700">${thumbHtml}</div><div class="flex-1 p-3 sm:p-4 flex flex-col justify-between min-w-0"><div class="top"><div class="flex items-center gap-1.5 text-[10px] sm:text-xs mb-2 flex-wrap"><span class="font-bold px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-md">${deal.source}</span><span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-md border border-gray-200 dark:border-gray-600">${deal.category||'기타'}</span><span class="text-gray-400 ml-auto">${getTimeAgo(deal.created_at)}</span></div><h2 class="font-bold text-gray-800 dark:text-gray-200 mb-2 text-sm sm:text-base leading-snug line-clamp-2">${deal.title}</h2></div><div class="bottom flex items-end justify-between gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700/50"><div class="flex flex-wrap items-baseline gap-1.5"><span class="font-extrabold text-lg sm:text-xl text-red-500 tracking-tight">${deal.price||'가격없음'}</span>${deal.shipping?`<span class="text-[10px] sm:text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">${deal.shipping}</span>`:''}</div></div></div>`;
-    
-    const commentBtn = document.createElement('button');
-    commentBtn.className = 'absolute top-2 right-2 p-2 bg-white/90 dark:bg-gray-800/90 rounded-full shadow-md text-purple-500 z-10';
+    link.innerHTML = `<div class="w-28 sm:w-full sm:aspect-video flex-shrink-0 relative overflow-hidden bg-gray-50 dark:bg-gray-900 border-r sm:border-r-0 sm:border-b border-gray-100 dark:border-gray-700">${thumbHtml}</div><div class="flex-1 p-3 sm:p-4 flex flex-col justify-between min-w-0"><div class="top"><div class="flex items-center gap-1.5 text-[10px] sm:text-xs mb-2 flex-wrap"><span class="font-bold px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-md">${deal.source}</span><span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-md border border-gray-200 dark:border-gray-600">${deal.category||'기타'}</span><span class="text-gray-400 ml-auto shrink-0">${getTimeAgo(deal.created_at)}</span></div><h2 class="font-bold text-gray-800 dark:text-gray-200 mb-2 text-sm sm:text-base leading-snug line-clamp-2">${deal.title}</h2></div><div class="bottom flex items-end justify-between gap-3 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700/50"><div class="flex flex-wrap items-baseline gap-1.5 min-w-0"><span class="font-extrabold text-lg sm:text-xl text-red-500 tracking-tight">${deal.price||'가격없음'}</span>${deal.shipping?`<span class="text-[10px] sm:text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">${deal.shipping}</span>`:''}</div><button type="button" class="comment-btn flex items-center justify-center p-2 bg-white/90 dark:bg-gray-800/90 rounded-full shadow-md text-purple-500 border border-purple-100 dark:border-gray-700 shrink-0" aria-label="댓글 열기"></button></div></div>`;
+
+    const commentBtn = link.querySelector('.comment-btn');
+    if (!commentBtn) return card;
     commentBtn.innerHTML = '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"></path></svg>';
     commentBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openCommentModal(deal.id, deal.title); };
-    card.appendChild(link); card.appendChild(commentBtn);
+    card.appendChild(link);
     return card;
 }
 
@@ -207,8 +207,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (pullIndicator) return;
         pullIndicator = document.createElement('div');
         pullIndicator.id = 'pull-indicator';
-        pullIndicator.className = 'fixed top-0 left-0 right-0 z-50 flex justify-center items-center py-2 bg-purple-600 text-white text-sm font-medium transition-transform duration-200 -translate-y-full';
+        pullIndicator.className = 'fixed top-0 left-0 right-0 z-50 flex justify-center items-center py-2 bg-purple-600 text-white text-sm font-medium transition-transform duration-200 pointer-events-none';
         pullIndicator.innerHTML = '<span class="mr-2">↓</span> 당겨서 새로고침';
+        pullIndicator.style.transform = 'translateY(-120%)';
         document.body.appendChild(pullIndicator);
     };
 
@@ -218,13 +219,17 @@ document.addEventListener('DOMContentLoaded', () => {
             pullIndicator.style.transform = `translateY(${Math.min(offset, 80)}px)`;
             pullIndicator.classList.toggle('bg-purple-600', offset < 80);
             pullIndicator.classList.toggle('bg-green-500', offset >= 80);
-            pullIndicator.querySelector('span').textContent = offset >= 80 ? '↻放手刷新' : '↓';
+            pullIndicator.querySelector('span').textContent = offset >= 80 ? '↻' : '↓';
         }
     };
 
     const resetPullIndicator = () => {
         if (!pullIndicator) return;
-        pullIndicator.style.transform = '-translate-y-full';
+        pullIndicator.style.transform = 'translateY(-120%)';
+        pullIndicator.classList.add('bg-purple-600');
+        pullIndicator.classList.remove('bg-green-500');
+        pullIndicator.querySelector('span').textContent = '↓';
+        pullIndicator.querySelector('span').classList.remove('animate-spin');
     };
 
     document.addEventListener('touchstart', (e) => {
