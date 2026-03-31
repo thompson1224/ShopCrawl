@@ -155,6 +155,7 @@ cd ShopCrawl
 cat > .env << 'EOF'
 APP_ENV=production
 PORT=8000
+SECRET_KEY=your_strong_random_secret_here
 GOOGLE_API_KEY=your_google_api_key_here
 NAVER_CLIENT_ID=your_naver_client_id
 NAVER_CLIENT_SECRET=your_naver_client_secret
@@ -183,6 +184,7 @@ services:
     environment:
       - APP_ENV=production
       - PORT=8000
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -337,6 +339,8 @@ sudo docker-compose up -d --build
 sudo docker-compose logs shopcrawl
 sudo docker logs shopcrawl -f
 ```
+
+`RuntimeError: FATAL: SECRET_KEY 환경변수가 설정되지 않았습니다`가 보이면 `.env`에 `SECRET_KEY`를 추가한 뒤 다시 배포해야 합니다.
 
 ### 포트 확인
 ```bash
