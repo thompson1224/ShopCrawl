@@ -39,7 +39,7 @@ jobs:
               sudo docker ps -a || true
               sudo docker-compose -f docker-compose.production.yml ps || true
               sudo docker-compose -f docker-compose.production.yml logs --tail=200 || true
-              curl -vfsS http://127.0.0.1:8000/health || true
+              curl --http1.1 -sS -D - http://127.0.0.1:8000/health || true
             }
 
             trap on_error ERR
@@ -68,6 +68,6 @@ jobs:
             sudo docker-compose -f docker-compose.production.yml down --remove-orphans || true
             sudo docker-compose -f docker-compose.production.yml up -d --build
             sleep 10
-            curl -fsS http://127.0.0.1:8000/health
+            curl --http1.1 -sS http://127.0.0.1:8000/health >/dev/null
             sudo docker image prune -f
             trap - ERR
