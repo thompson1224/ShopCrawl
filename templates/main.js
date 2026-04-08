@@ -96,20 +96,20 @@ function createSkeletonCard() {
             <div class="deal-thumb skeleton-block"></div>
             <div class="deal-body">
                 <div class="deal-meta">
-                    <div class="skeleton-block rounded-full h-6 w-16"></div>
-                    <div class="skeleton-block rounded-full h-6 w-20"></div>
-                    <div class="skeleton-block rounded-full h-5 w-14 ml-auto"></div>
+                    <div class="skeleton-block rounded-full h-5 w-14"></div>
+                    <div class="skeleton-block rounded-full h-5 w-16"></div>
+                    <div class="skeleton-block rounded-full h-4 w-12 ml-auto"></div>
                 </div>
                 <div class="space-y-2">
-                    <div class="skeleton-block h-5 rounded-xl"></div>
-                    <div class="skeleton-block h-5 rounded-xl w-4/5"></div>
+                    <div class="skeleton-block h-4 rounded-xl"></div>
+                    <div class="skeleton-block h-4 rounded-xl w-4/5"></div>
                 </div>
                 <div class="deal-foot">
                     <div class="deal-price-wrap space-y-2 flex-1">
-                        <div class="skeleton-block h-7 rounded-xl w-28"></div>
-                        <div class="skeleton-block h-5 rounded-full w-20"></div>
+                        <div class="skeleton-block h-5 rounded-xl w-20"></div>
+                        <div class="skeleton-block h-4 rounded-full w-16"></div>
                     </div>
-                    <div class="skeleton-block h-11 w-11 rounded-2xl"></div>
+                    <div class="skeleton-block h-8 w-8 rounded-xl"></div>
                 </div>
             </div>
         </div>
@@ -192,7 +192,7 @@ function createDealCard(deal) {
     commentBtn.className = "comment-btn";
     commentBtn.setAttribute("aria-label", "댓글 열기");
     commentBtn.innerHTML = `
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8m-8 4h5m7 6l-3.4-3.4A8 8 0 1018 18.6L22 22"></path>
         </svg>
     `;
