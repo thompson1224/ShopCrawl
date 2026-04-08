@@ -1,326 +1,609 @@
+const state = {
+    page: 1,
+    source: "all",
+    totalPages: 1,
+    priceRange: "all",
+    category: "all",
+    shippingFree: false,
+    sort: "latest",
+    loading: false,
+    searchMode: false,
+    currentQuery: "",
+    currentDeals: [],
+};
+
 function sanitizeExternalUrl(value) {
-    if (!value) return '#';
+    if (!value) return "#";
     try {
         const parsed = new URL(value, window.location.origin);
-        return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '#';
-    } catch { return '#'; }
-}
-
-function toggleDarkMode() {
-    const html = document.documentElement;
-    const isDark = html.classList.contains('dark');
-    html.classList.toggle('dark');
-    localStorage.setItem('theme', isDark ? 'light' : 'dark');
-}
-
-function initDarkMode() {
-    const savedTheme = localStorage.getItem('theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) document.documentElement.classList.add('dark');
-}
-
-function createFallbackThumbnail() {
-    const fallback = document.createElement('div');
-    fallback.className = 'w-full h-full bg-gradient-to-br from-purple-100 to-blue-100 rounded-lg flex items-center justify-center text-gray-400 text-xl';
-    fallback.style.minHeight = '4rem';
-    fallback.textContent = '🖼️';
-    return fallback;
-}
-
-function appendInlineMarkdown(container, text) {
-    const pattern = /(\*\*(.+?)\*\*|\[(.+?)\]\((.+?)\))/g;
-    let lastIndex = 0;
-    let match;
-    while ((match = pattern.exec(text)) !== null) {
-        if (match.index > lastIndex) container.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
-        if (match[2] !== undefined) {
-            const strong = document.createElement('strong');
-            strong.textContent = match[2];
-            container.appendChild(strong);
-        } else {
-            const link = document.createElement('a');
-            link.href = sanitizeExternalUrl(match[4]);
-            link.target = '_blank'; link.rel = 'noopener noreferrer';
-            link.className = 'text-purple-600 font-bold underline hover:text-purple-800';
-            link.textContent = `${match[3]} 🔗`;
-            container.appendChild(link);
-        }
-        lastIndex = pattern.lastIndex;
+        return ["http:", "https:"].includes(parsed.protocol) ? parsed.href : "#";
+    } catch {
+        return "#";
     }
-    if (lastIndex < text.length) container.appendChild(document.createTextNode(text.slice(lastIndex)));
-}
-
-function renderAiAnswer(container, answer) {
-    container.replaceChildren();
-    String(answer || '').split('\n').forEach((line, index) => {
-        if (index > 0) container.appendChild(document.createElement('br'));
-        const normalizedLine = line.startsWith('* ') ? `• ${line.slice(2)}` : line;
-        appendInlineMarkdown(container, normalizedLine);
-    });
-}
-
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-    const toast = document.createElement('div');
-    const bgClass = type === 'error' ? 'bg-red-500' : (type === 'success' ? 'bg-green-500' : 'bg-gray-800/90');
-    toast.className = `toast px-6 py-3 rounded-2xl text-white font-medium shadow-2xl backdrop-blur-md ${bgClass} flex items-center gap-2`;
-    toast.innerHTML = `<span>${type==='error'?'❌':type==='success'?'✅':'🔔'}</span><span class="text-sm">${message}</span>`;
-    container.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0'; toast.style.transform = 'translateY(10px)'; toast.style.transition = 'all 0.3s ease';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
 }
 
 function getElement(id) {
     return document.getElementById(id);
 }
 
-function createSkeletonCard() {
-    const card = document.createElement('div');
-    card.className = 'glass-morphism rounded-2xl shadow-lg overflow-hidden flex flex-row sm:flex-col h-full bg-white dark:bg-gray-800';
-    card.innerHTML = `<div class="w-28 sm:w-full sm:aspect-video skeleton"></div><div class="flex-1 p-3 sm:p-4 space-y-3"><div class="flex gap-2"><div class="h-4 w-12 skeleton rounded-md"></div><div class="h-4 w-16 skeleton rounded-md ml-auto"></div></div><div class="h-5 w-full skeleton rounded-md"></div><div class="h-5 w-3/4 skeleton rounded-md"></div><div class="pt-2 border-t border-gray-100 dark:border-gray-700/50 flex justify-between"><div class="h-6 w-24 skeleton rounded-md"></div><div class="h-6 w-6 skeleton rounded-full"></div></div></div>`;
-    return card;
+function formatCount(value) {
+    return new Intl.NumberFormat("ko-KR").format(Number(value) || 0);
 }
 
-const getTimeAgo = (dateString) => {
-    const diffMs = new Date() - new Date(dateString);
-    const m = Math.floor(diffMs / 60000), h = Math.floor(diffMs / 3600000), d = Math.floor(diffMs / 86400000);
-    if (m < 1) return '방금 전'; if (m < 60) return `${m}분 전`; if (h < 24) return `${h}시간 전`; if (d < 7) return `${d}일 전`;
-    return new Date(dateString).toLocaleDateString('ko-KR');
-};
+function getSourceLabel(value) {
+    return value === "all" ? "전체" : value;
+}
+
+function getTimeAgo(dateString) {
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return "-";
+    const diffMs = new Date() - date;
+    const minutes = Math.floor(diffMs / 60000);
+    const hours = Math.floor(diffMs / 3600000);
+    const days = Math.floor(diffMs / 86400000);
+    if (minutes < 1) return "방금";
+    if (minutes < 60) return `${minutes}분 전`;
+    if (hours < 24) return `${hours}시간 전`;
+    if (days < 7) return `${days}일 전`;
+    return date.toLocaleDateString("ko-KR");
+}
+
+function toggleDarkMode() {
+    const html = document.documentElement;
+    const isDark = html.classList.contains("dark");
+    html.classList.toggle("dark");
+    localStorage.setItem("theme", isDark ? "light" : "dark");
+}
+
+function initDarkMode() {
+    const savedTheme = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+        document.documentElement.classList.add("dark");
+    }
+}
+
+function showToast(message, type = "info") {
+    const container = getElement("toast-container");
+    if (!container) return;
+    const toast = document.createElement("div");
+    const bgClass = type === "error" ? "bg-red-500" : type === "success" ? "bg-green-600" : "bg-slate-900/90";
+    const icon = type === "error" ? "✕" : type === "success" ? "✓" : "i";
+    toast.className = `toast px-5 py-3 rounded-2xl text-white shadow-2xl backdrop-blur-md ${bgClass} flex items-center gap-3`;
+    toast.innerHTML = `<span class="font-bold">${icon}</span><span class="text-sm">${message}</span>`;
+    toast.onclick = () => toast.remove();
+    container.appendChild(toast);
+    setTimeout(() => {
+        toast.style.opacity = "0";
+        toast.style.transform = "translateY(10px)";
+        toast.style.transition = "all 0.3s ease";
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+function createFallbackThumbnail() {
+    const fallback = document.createElement("div");
+    fallback.className = "thumb-fallback";
+    fallback.textContent = "◌";
+    return fallback;
+}
+
+function createSkeletonCard() {
+    const card = document.createElement("article");
+    card.className = "deal-card skeleton-card";
+    card.innerHTML = `
+        <div class="deal-link">
+            <div class="deal-thumb skeleton-block"></div>
+            <div class="deal-body">
+                <div class="deal-meta">
+                    <div class="skeleton-block rounded-full h-6 w-16"></div>
+                    <div class="skeleton-block rounded-full h-6 w-20"></div>
+                    <div class="skeleton-block rounded-full h-5 w-14 ml-auto"></div>
+                </div>
+                <div class="space-y-2">
+                    <div class="skeleton-block h-5 rounded-xl"></div>
+                    <div class="skeleton-block h-5 rounded-xl w-4/5"></div>
+                </div>
+                <div class="deal-foot">
+                    <div class="deal-price-wrap space-y-2 flex-1">
+                        <div class="skeleton-block h-7 rounded-xl w-28"></div>
+                        <div class="skeleton-block h-5 rounded-full w-20"></div>
+                    </div>
+                    <div class="skeleton-block h-11 w-11 rounded-2xl"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    return card;
+}
 
 function createDealCard(deal) {
-    const safeLink = sanitizeExternalUrl(deal.link), safeThumb = sanitizeExternalUrl(deal.thumbnail);
-    const card = document.createElement('div'); card.className = 'relative h-full';
-    const link = document.createElement('a'); link.href = safeLink; link.target = '_blank'; link.rel = 'noopener noreferrer';
-    link.className = 'block glass-morphism rounded-2xl shadow-lg hover:shadow-xl group overflow-hidden flex flex-row sm:flex-col h-full bg-white dark:bg-gray-800 transition-all duration-300';
-    
-    let thumbHtml = safeThumb !== '#' ? `<img src="/image-proxy?url=${encodeURIComponent(safeThumb)}&source=${encodeURIComponent(deal.source)}" class="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%25%22 height=%22100%25%22%3E%3Crect width=%22100%25%22 height=%22100%25%22 fill=%22%23eee%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2220%22%3E🖼️%3C/text%3E%3C/svg%3E'">` : `<div class="absolute inset-0 w-full h-full bg-gray-100 flex items-center justify-center text-xl">🖼️</div>`;
+    const safeLink = sanitizeExternalUrl(deal.link);
+    const safeThumb = sanitizeExternalUrl(deal.thumbnail);
 
-    link.innerHTML = `<div class="w-28 sm:w-full sm:aspect-video flex-shrink-0 relative overflow-hidden bg-gray-50 dark:bg-gray-900 border-r sm:border-r-0 sm:border-b border-gray-100 dark:border-gray-700">${thumbHtml}</div><div class="flex-1 p-3 sm:p-4 flex flex-col justify-between min-w-0"><div class="top"><div class="flex items-center gap-1.5 text-[10px] sm:text-xs mb-2 flex-wrap"><span class="font-bold px-2 py-0.5 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-md">${deal.source}</span><span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-md border border-gray-200 dark:border-gray-600">${deal.category||'기타'}</span><span class="text-gray-400 ml-auto shrink-0">${getTimeAgo(deal.created_at)}</span></div><h2 class="font-bold text-gray-800 dark:text-gray-200 mb-2 text-sm sm:text-base leading-snug line-clamp-2">${deal.title}</h2></div><div class="bottom flex items-end justify-between gap-3 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700/50"><div class="flex flex-wrap items-baseline gap-1.5 min-w-0"><span class="font-extrabold text-lg sm:text-xl text-red-500 tracking-tight">${deal.price||'가격없음'}</span>${deal.shipping?`<span class="text-[10px] sm:text-xs text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">${deal.shipping}</span>`:''}</div><button type="button" class="comment-btn flex items-center justify-center p-2 bg-white/90 dark:bg-gray-800/90 rounded-full shadow-md text-purple-500 border border-purple-100 dark:border-gray-700 shrink-0" aria-label="댓글 열기"></button></div></div>`;
+    const card = document.createElement("article");
+    card.className = "deal-card";
 
-    const commentBtn = link.querySelector('.comment-btn');
-    if (!commentBtn) return card;
-    commentBtn.innerHTML = '<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"></path></svg>';
-    commentBtn.onclick = (e) => { e.preventDefault(); e.stopPropagation(); openCommentModal(deal.id, deal.title); };
+    const link = document.createElement("a");
+    link.className = "deal-link";
+    link.href = safeLink;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+
+    const thumb = document.createElement("div");
+    thumb.className = "deal-thumb";
+    if (safeThumb !== "#") {
+        const image = document.createElement("img");
+        image.src = `/image-proxy?url=${encodeURIComponent(safeThumb)}&source=${encodeURIComponent(deal.source || "all")}`;
+        image.alt = deal.title || "딜 이미지";
+        image.loading = "lazy";
+        image.onerror = () => {
+            thumb.replaceChildren(createFallbackThumbnail());
+        };
+        thumb.appendChild(image);
+    } else {
+        thumb.appendChild(createFallbackThumbnail());
+    }
+
+    const body = document.createElement("div");
+    body.className = "deal-body";
+
+    const meta = document.createElement("div");
+    meta.className = "deal-meta";
+
+    const sourceBadge = document.createElement("span");
+    sourceBadge.className = "deal-source";
+    sourceBadge.textContent = deal.source || "소스";
+
+    const categoryBadge = document.createElement("span");
+    categoryBadge.className = "deal-badge";
+    categoryBadge.textContent = deal.category || "기타";
+
+    const age = document.createElement("span");
+    age.className = "deal-age";
+    age.textContent = getTimeAgo(deal.created_at);
+
+    meta.append(sourceBadge, categoryBadge, age);
+
+    const title = document.createElement("h3");
+    title.className = "deal-title line-clamp-2";
+    title.textContent = deal.title || "제목 없음";
+
+    const foot = document.createElement("div");
+    foot.className = "deal-foot";
+
+    const priceWrap = document.createElement("div");
+    priceWrap.className = "deal-price-wrap";
+
+    const price = document.createElement("span");
+    price.className = "deal-price";
+    price.textContent = deal.price || "가격 확인";
+    priceWrap.appendChild(price);
+
+    if (deal.shipping) {
+        const shipping = document.createElement("span");
+        shipping.className = "deal-shipping";
+        shipping.textContent = deal.shipping;
+        priceWrap.appendChild(shipping);
+    }
+
+    const commentBtn = document.createElement("button");
+    commentBtn.type = "button";
+    commentBtn.className = "comment-btn";
+    commentBtn.setAttribute("aria-label", "댓글 열기");
+    commentBtn.innerHTML = `
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8m-8 4h5m7 6l-3.4-3.4A8 8 0 1018 18.6L22 22"></path>
+        </svg>
+    `;
+    commentBtn.onclick = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openCommentModal(deal.id, deal.title);
+    };
+
+    foot.append(priceWrap, commentBtn);
+    body.append(meta, title, foot);
+    link.append(thumb, body);
     card.appendChild(link);
+
     return card;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    initDarkMode();
-    const list = getElement('hotdeal-list');
-    const sBtns = getElement('source-buttons');
-    const pg = getElement('pagination');
-    const sentinel = getElement('infinite-scroll-sentinel');
-    if (!list || !sBtns || !pg) return;
-    let page = 1, source = 'all', total = 1, pr = 'all', cat = 'all', ship = false, sort = 'latest', loading = false;
-
-    const observer = new IntersectionObserver(es => { if(es[0].isIntersecting && !loading && page < total) fetchDeals(source, page + 1, true); }, { threshold: 0.1 });
-    if (sentinel) observer.observe(sentinel);
-
-    window.switchTab = t => {
-        const h = getElement('nav-home');
-        const a = getElement('nav-ai');
-        if (!h || !a) return;
-        if(t==='home') {
-            window.scrollTo({top:0, behavior:'smooth'});
-            h.className='flex flex-col items-center gap-1 text-purple-600';
-            a.className='flex flex-col items-center gap-1 text-gray-400';
-            showToast('홈 리스트다냥!');
-        } else {
-            const ai = getElement('aiSearchInput');
-            if(ai){
-                ai.scrollIntoView({behavior:'smooth',block:'center'});
-                ai.focus();
-            }
-            a.className='flex flex-col items-center gap-1 text-purple-600';
-            h.className='flex flex-col items-center gap-1 text-gray-400';
-            showToast('AI 딜냥이다냥! 🐱');
-        }
-    };
-
-    window.toggleFilters = () => {
-        const c = getElement('filterContent');
-        const i = getElement('filterToggleIcon');
-        if (!c || !i) return;
-        c.classList.toggle('hidden'); i.classList.toggle('rotate-180');
-    };
-
-    window.toggleProfileMenu = () => {
-        const d = document.querySelector('.profile-dropdown');
-        if (!d) return;
-        d.style.display = d.style.display === 'block' ? 'none' : 'block';
-    };
-
-    const fetchDeals = async (s = 'all', p = 1, append = false) => {
-        if(loading) return; loading = true; source = s; page = p;
-        if(!append) { list.innerHTML = ''; for(let i=0;i<8;i++) list.appendChild(createSkeletonCard()); }
-        const ps = new URLSearchParams({source:s, page:p, per_page:20, price_range:pr, category:cat, shipping_free:ship, sort:sort});
-        try {
-            const res = await fetch(`/api/hotdeals?${ps}`);
-            const data = await res.json();
-            const deals = data.deals || data;
-            total = data.pagination ? data.pagination.total_pages : 1;
-            if(!append) { list.innerHTML = ''; if(deals.length===0) { list.innerHTML = '<div class="col-span-full text-center p-10 bg-white rounded-xl shadow">😿 핫딜이 없다냥!</div>'; return; } }
-            deals.forEach(d => list.appendChild(createDealCard(d)));
-            renderPagination(data.pagination);
-        } catch(e) { console.error(e); if(!append) list.innerHTML = '에러났다냥 😿'; else showToast('추가 로딩 실패 😿', 'error'); }
-        finally { loading = false; }
-    };
-
-    const renderPagination = (p) => {
-        pg.innerHTML = ''; if(!p || p.total_pages <= 1) return;
-        const w = document.createElement('div'); w.className = 'flex justify-center gap-1 mt-6';
-        const btn = (t, v, active) => {
-            const b = document.createElement('button'); b.textContent = t;
-            b.className = `px-3 py-1.5 rounded-lg text-sm ${active?'bg-purple-600 text-white':'bg-white text-gray-700 border'}`;
-            b.onclick = () => fetchDeals(source, v); return b;
-        };
-        if(page > 1) w.appendChild(btn('‹', page-1));
-        for(let i=Math.max(1,page-2);i<=Math.min(p.total_pages,page+2);i++) w.appendChild(btn(i, i, i===page));
-        if(page < p.total_pages) w.appendChild(btn('›', page+1));
-        pg.appendChild(w);
-    };
-
-    sBtns.addEventListener('click', e => {
-        const b = e.target.closest('button');
-        if(b) { sBtns.querySelectorAll('.source-btn').forEach(x=>x.classList.remove('active','bg-purple-600','text-white')); b.classList.add('active','bg-purple-600','text-white'); fetchDeals(b.dataset.source, 1); }
+function updateSourceButtons() {
+    const sourceButtons = getElement("source-buttons");
+    if (!sourceButtons) return;
+    sourceButtons.querySelectorAll(".source-btn").forEach((button) => {
+        const isActive = button.dataset.source === state.source;
+        button.classList.toggle("active", isActive);
     });
+}
 
-    const f1=getElement('priceRangeFilter'), f2=getElement('categoryFilter'), f3=getElement('shippingFreeFilter'), f4=getElement('sortOrder');
-    if (!f1 || !f2 || !f3 || !f4) return;
-    const apply = () => { pr=f1.value; cat=f2.value; ship=f3.checked; sort=f4.value; fetchDeals(source, 1); };
-    [f1,f2,f3,f4].forEach(x=>x.addEventListener('change', apply));
-    window.resetFilters = () => { f1.value=f2.value='all'; f3.checked=false; f4.value='latest'; apply(); };
+function updateBottomNav(tab) {
+    const home = getElement("nav-home");
+    const search = getElement("nav-search");
+    if (!home || !search) return;
+    home.classList.toggle("active", tab === "home");
+    search.classList.toggle("active", tab === "search");
+}
 
-    fetchDeals('all', 1);
+function updateSummary(deals = [], pagination = null, mode = "feed") {
+    const visibleDeals = state.currentDeals.length > 0 ? state.currentDeals : deals;
+    const resultCount = pagination ? pagination.total : deals.length;
+    const freeShippingCount = visibleDeals.filter((deal) => String(deal.shipping || "").includes("무료")).length;
+    const latestDeal = visibleDeals[0] ? getTimeAgo(visibleDeals[0].created_at) : "-";
 
-    let pullStartY = 0;
-    let pullCurrentY = 0;
-    let isPulling = false;
-    let pullIndicator = null;
+    const feedTitle = getElement("feedTitleText");
+    const feedDescription = getElement("feedDescriptionText");
+    const feedResultCount = getElement("feedResultCount");
+    const feedSourceLabel = getElement("feedSourceLabel");
+    const activeSourceLabel = getElement("activeSourceLabel");
+    const heroResultCount = getElement("heroResultCount");
+    const heroFreeShippingCount = getElement("heroFreeShippingCount");
+    const heroLatestLabel = getElement("heroLatestLabel");
+    const statusLabel = getElement("feedStatusLabel");
 
-    const createPullIndicator = () => {
-        if (pullIndicator) return;
-        pullIndicator = document.createElement('div');
-        pullIndicator.id = 'pull-indicator';
-        pullIndicator.className = 'fixed top-0 left-0 right-0 z-50 flex justify-center items-center py-2 bg-purple-600 text-white text-sm font-medium transition-transform duration-200 pointer-events-none';
-        pullIndicator.innerHTML = '<span class="mr-2">↓</span> 당겨서 새로고침';
-        pullIndicator.style.transform = 'translateY(-120%)';
-        document.body.appendChild(pullIndicator);
-    };
+    if (feedResultCount) feedResultCount.textContent = formatCount(resultCount);
+    if (feedSourceLabel) feedSourceLabel.textContent = getSourceLabel(state.source);
+    if (activeSourceLabel) activeSourceLabel.textContent = getSourceLabel(state.source);
+    if (heroResultCount) heroResultCount.textContent = formatCount(resultCount);
+    if (heroFreeShippingCount) heroFreeShippingCount.textContent = formatCount(freeShippingCount);
+    if (heroLatestLabel) heroLatestLabel.textContent = latestDeal;
 
-    const updatePullIndicator = (offset) => {
-        if (!pullIndicator) return;
-        if (offset > 0) {
-            pullIndicator.style.transform = `translateY(${Math.min(offset, 80)}px)`;
-            pullIndicator.classList.toggle('bg-purple-600', offset < 80);
-            pullIndicator.classList.toggle('bg-green-500', offset >= 80);
-            pullIndicator.querySelector('span').textContent = offset >= 80 ? '↻' : '↓';
-        }
-    };
-
-    const resetPullIndicator = () => {
-        if (!pullIndicator) return;
-        pullIndicator.style.transform = 'translateY(-120%)';
-        pullIndicator.classList.add('bg-purple-600');
-        pullIndicator.classList.remove('bg-green-500');
-        pullIndicator.querySelector('span').textContent = '↓';
-        pullIndicator.querySelector('span').classList.remove('animate-spin');
-    };
-
-    document.addEventListener('touchstart', (e) => {
-        if (window.scrollY === 0) {
-            pullStartY = e.touches[0].clientY;
-            isPulling = true;
-            createPullIndicator();
-        }
-    }, { passive: true });
-
-    document.addEventListener('touchmove', (e) => {
-        if (!isPulling) return;
-        pullCurrentY = e.touches[0].clientY;
-        const pullDiff = pullCurrentY - pullStartY;
-        if (pullDiff > 0) {
-            e.preventDefault();
-            updatePullIndicator(pullDiff);
-        }
-    }, { passive: false });
-
-    document.addEventListener('touchend', () => {
-        if (!isPulling) return;
-        const pullDiff = pullCurrentY - pullStartY;
-        if (pullDiff >= 80) {
-            pullIndicator.style.transition = 'transform 0.3s ease';
-            pullIndicator.style.transform = 'translateY(0)';
-            pullIndicator.querySelector('span').textContent = '↻';
-            pullIndicator.querySelector('span').classList.add('animate-spin');
-            fetchDeals(source, 1);
-            setTimeout(() => {
-                resetPullIndicator();
-                pullIndicator.style.transition = 'transform 0.2s ease';
-                if (pullIndicator) pullIndicator.querySelector('span').classList.remove('animate-spin');
-            }, 1000);
-        } else {
-            resetPullIndicator();
-        }
-        isPulling = false;
-        pullStartY = 0;
-        pullCurrentY = 0;
-    }, { passive: true });
-});
-
-async function performAiSearch() {
-    const i = getElement('aiSearchInput'), r = getElement('aiResultArea'), l = getElement('aiLoading'), ab = getElement('aiAnswerBox'), at = getElement('aiAnswerText'), sl = getElement('aiSourceList');
-    if (!i || !r || !l || !ab || !at || !sl) {
-        showToast('AI 검색 UI가 아직 준비되지 않았다냥.', 'info');
+    if (mode === "search") {
+        if (feedTitle) feedTitle.textContent = `검색 결과 · ${state.currentQuery}`;
+        if (feedDescription) feedDescription.textContent = "일반 검색 결과입니다. 다시 소스 피드로 돌아가려면 소스를 선택하거나 필터를 조정하세요.";
+        if (feedSourceLabel) feedSourceLabel.textContent = "검색";
+        if (statusLabel) statusLabel.textContent = `검색어 "${state.currentQuery}" 기준으로 관련 딜을 정리했습니다.`;
         return;
     }
-    const q = i.value.trim(); if(!q) { showToast('뭐 찾냐냥? 😺'); return; }
-    r.classList.remove('hidden'); l.classList.remove('hidden'); ab.classList.add('hidden');
+
+    if (feedTitle) feedTitle.textContent = "현재 핫딜 피드";
+    if (feedDescription) feedDescription.textContent = "선택한 소스와 필터를 기준으로 최신 딜을 정리합니다.";
+    if (statusLabel) statusLabel.textContent = `${getSourceLabel(state.source)} 기준 피드를 ${formatCount(resultCount)}건 기준으로 정리했습니다.`;
+}
+
+function renderEmptyState(message) {
+    const list = getElement("hotdeal-list");
+    if (!list) return;
+    list.innerHTML = `<div class="empty-state col-span-full">${message}</div>`;
+}
+
+function renderDeals(deals, append = false) {
+    const list = getElement("hotdeal-list");
+    if (!list) return;
+    if (!append) list.innerHTML = "";
+    deals.forEach((deal) => list.appendChild(createDealCard(deal)));
+}
+
+function renderLoadingState() {
+    const list = getElement("hotdeal-list");
+    if (!list) return;
+    list.innerHTML = "";
+    for (let index = 0; index < 6; index += 1) {
+        list.appendChild(createSkeletonCard());
+    }
+}
+
+function renderPagination(pagination) {
+    const container = getElement("pagination");
+    if (!container) return;
+    container.innerHTML = "";
+    if (state.searchMode || !pagination || pagination.total_pages <= 1) return;
+
+    const row = document.createElement("div");
+    row.className = "pagination-row";
+
+    const makeButton = (label, targetPage, isActive = false) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = label;
+        button.className = `pager-btn${isActive ? " active" : ""}`;
+        button.onclick = () => fetchDeals(state.source, targetPage, false);
+        return button;
+    };
+
+    if (state.page > 1) row.appendChild(makeButton("‹", state.page - 1));
+    for (let page = Math.max(1, state.page - 2); page <= Math.min(pagination.total_pages, state.page + 2); page += 1) {
+        row.appendChild(makeButton(String(page), page, page === state.page));
+    }
+    if (state.page < pagination.total_pages) row.appendChild(makeButton("›", state.page + 1));
+
+    container.appendChild(row);
+}
+
+async function loadDashboardStats() {
     try {
-        const res = await fetch(`/api/search/ai?query=${encodeURIComponent(q)}`);
-        const d = await res.json();
-        l.classList.add('hidden'); ab.classList.remove('hidden'); renderAiAnswer(at, d.answer);
-        const sSec = getElement('aiSourceSection'), sc = getElement('aiSourceCount'), ti = getElement('aiToggleIcon');
-        if (!sSec || !sc || !ti) return;
-        sl.innerHTML = '';
-        if(d.sources && d.sources.length > 0) {
-            sSec.classList.remove('hidden'); sl.classList.remove('hidden'); ti.classList.remove('rotate-180'); sc.textContent = d.sources.length;
-            d.sources.forEach(s => {
-                const c = document.createElement('a'); c.href = sanitizeExternalUrl(s.link); c.target = '_blank'; c.className = 'block bg-white p-3 rounded-lg shadow-sm border mb-2 flex justify-between items-center';
-                c.innerHTML = `<div class="flex items-center gap-2 overflow-hidden"><span>🛍️</span><span class="text-sm truncate">${s.title}</span></div><span>›</span>`;
-                sl.appendChild(c);
-            });
-        } else sSec.classList.add('hidden');
-    } catch(e) { l.classList.add('hidden'); ab.classList.remove('hidden'); at.textContent = "에러났다냥 😿"; showToast('AI 검색 에러 😿', 'error'); }
+        const response = await fetch("/api/stats");
+        if (!response.ok) return;
+        const stats = await response.json();
+        const heroTotalDeals = getElement("heroTotalDeals");
+        const heroCoverageText = getElement("heroCoverageText");
+        if (heroTotalDeals) heroTotalDeals.textContent = formatCount(stats.total);
+        if (heroCoverageText) {
+            const sources = [
+                ["뽐뿌", stats.ppomppu],
+                ["루리웹", stats.ruliweb],
+                ["Zod", stats.zod],
+                ["어미새", stats.eomisae],
+                ["퀘이사존", stats.quasarzone],
+            ];
+            sources.sort((left, right) => (right[1] || 0) - (left[1] || 0));
+            const [topSource, topCount] = sources[0];
+            heroCoverageText.textContent = `가장 많은 소스는 ${topSource} · ${formatCount(topCount)}건`;
+        }
+    } catch (error) {
+        console.error("통계 로드 실패:", error);
+    }
+}
+
+async function fetchDeals(source = "all", page = 1, append = false) {
+    if (state.loading) return;
+    state.loading = true;
+    state.source = source;
+    state.page = page;
+    state.searchMode = false;
+    state.currentQuery = "";
+    updateSourceButtons();
+    if (!append) renderLoadingState();
+
+    const params = new URLSearchParams({
+        source,
+        page,
+        per_page: "20",
+        price_range: state.priceRange,
+        category: state.category,
+        shipping_free: String(state.shippingFree),
+        sort: state.sort,
+    });
+
+    try {
+        const response = await fetch(`/api/hotdeals?${params.toString()}`);
+        const data = await response.json();
+        const deals = data.deals || [];
+        state.totalPages = data.pagination ? data.pagination.total_pages : 1;
+        state.currentDeals = append ? state.currentDeals.concat(deals) : deals.slice();
+
+        if (!append && deals.length === 0) {
+            renderEmptyState("선택한 조건에 맞는 핫딜이 없습니다.");
+            renderPagination(data.pagination);
+            updateSummary([], data.pagination, "feed");
+            return;
+        }
+
+        renderDeals(deals, append);
+        renderPagination(data.pagination);
+        updateSummary(deals, data.pagination, "feed");
+    } catch (error) {
+        console.error(error);
+        if (!append) renderEmptyState("핫딜 피드를 불러오지 못했습니다.");
+        else showToast("추가 로딩에 실패했습니다.", "error");
+    } finally {
+        state.loading = false;
+    }
 }
 
 async function performSearch() {
-    const i = getElement('searchInput');
-    const l = getElement('hotdeal-list');
-    if(!i || !l) return;
-    const q = i.value.trim();
-    if(!q) { showToast('검색어 입력해라냥!'); return; }
+    const input = getElement("searchInput");
+    if (!input) return;
+
+    const query = input.value.trim();
+    if (!query) {
+        showToast("검색어를 입력해주세요.", "info");
+        return;
+    }
+
+    state.loading = true;
+    state.searchMode = true;
+    state.currentQuery = query;
+    renderLoadingState();
+
+    const params = new URLSearchParams({
+        q: query,
+        page: "1",
+        per_page: "50",
+        category: state.category,
+        price_range: state.priceRange,
+        shipping_free: String(state.shippingFree),
+        sort: state.sort,
+    });
+
     try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&source=all&page=1&per_page=50`);
-        const d = await res.json();
-        l.innerHTML = '';
-        if(d.deals && d.deals.length > 0) {
-            d.deals.forEach(x => l.appendChild(createDealCard(x)));
-            const pagination = getElement('pagination');
-            if (pagination) pagination.innerHTML = '';
-        } else l.innerHTML = '<div class="col-span-full text-center p-10 bg-white rounded-xl shadow">🔍 결과 없다냥!</div>';
-    } catch(e) { showToast('검색 중 에러났다냥 😿', 'error'); }
+        const response = await fetch(`/api/search?${params.toString()}`);
+        const data = await response.json();
+        const deals = data.deals || [];
+        state.currentDeals = deals.slice();
+        state.page = 1;
+        state.totalPages = data.pagination ? data.pagination.total_pages : 1;
+
+        if (deals.length === 0) {
+            renderEmptyState(`"${query}" 검색 결과가 없습니다.`);
+            updateSummary([], data.pagination, "search");
+            renderPagination(null);
+            return;
+        }
+
+        renderDeals(deals, false);
+        renderPagination(null);
+        updateSummary(deals, data.pagination, "search");
+        showToast(`"${query}" 검색 결과를 불러왔습니다.`, "success");
+    } catch (error) {
+        console.error(error);
+        renderEmptyState("검색 중 오류가 발생했습니다.");
+        showToast("검색 중 오류가 발생했습니다.", "error");
+    } finally {
+        state.loading = false;
+    }
 }
 
-function toggleAiSourceList() {
-    const l = getElement('aiSourceList');
-    const i = getElement('aiToggleIcon');
-    if (!l || !i) return;
-    l.classList.toggle('hidden');
-    i.classList.toggle('rotate-180');
+function toggleMobilePanel(force) {
+    const panel = getElement("mobileQuickPanel");
+    const backdrop = getElement("mobileQuickBackdrop");
+    if (!panel || !backdrop) return;
+
+    const shouldOpen = typeof force === "boolean" ? force : panel.classList.contains("hidden");
+    panel.classList.toggle("hidden", !shouldOpen);
+    backdrop.classList.toggle("hidden", !shouldOpen);
 }
+
+function closeProfileMenu() {
+    const dropdown = document.querySelector(".profile-dropdown");
+    const trigger = getElement("profileTrigger");
+    if (!dropdown || !trigger) return;
+    dropdown.classList.remove("open");
+    trigger.setAttribute("aria-expanded", "false");
+}
+
+function toggleProfileMenu() {
+    const dropdown = document.querySelector(".profile-dropdown");
+    const trigger = getElement("profileTrigger");
+    if (!dropdown || !trigger) return;
+    const isOpen = dropdown.classList.contains("open");
+    dropdown.classList.toggle("open", !isOpen);
+    trigger.setAttribute("aria-expanded", String(!isOpen));
+}
+
+function toggleFilters() {
+    const content = getElement("filterContent");
+    const icon = getElement("filterToggleIcon");
+    if (!content || !icon) return;
+    content.classList.toggle("hidden");
+    icon.classList.toggle("rotate-180");
+}
+
+function switchTab(tab) {
+    updateBottomNav(tab);
+    toggleMobilePanel(false);
+
+    if (tab === "home") {
+        const target = getElement("workspace-start");
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+    }
+
+    const searchShell = getElement("search-shell");
+    if (searchShell) {
+        searchShell.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    const searchInput = getElement("searchInput");
+    if (searchInput) searchInput.focus();
+}
+
+function resetFilters() {
+    const categoryFilter = getElement("categoryFilter");
+    const priceRangeFilter = getElement("priceRangeFilter");
+    const shippingFreeFilter = getElement("shippingFreeFilter");
+    const sortOrder = getElement("sortOrder");
+    if (!categoryFilter || !priceRangeFilter || !shippingFreeFilter || !sortOrder) return;
+
+    categoryFilter.value = "all";
+    priceRangeFilter.value = "all";
+    shippingFreeFilter.checked = false;
+    sortOrder.value = "latest";
+
+    state.category = "all";
+    state.priceRange = "all";
+    state.shippingFree = false;
+    state.sort = "latest";
+
+    fetchDeals(state.source, 1, false);
+}
+
+window.performSearch = performSearch;
+window.toggleMobilePanel = toggleMobilePanel;
+window.toggleProfileMenu = toggleProfileMenu;
+window.toggleFilters = toggleFilters;
+window.switchTab = switchTab;
+window.resetFilters = resetFilters;
+window.toggleDarkMode = toggleDarkMode;
+
+document.addEventListener("DOMContentLoaded", () => {
+    initDarkMode();
+
+    const sourceButtons = getElement("source-buttons");
+    const categoryFilter = getElement("categoryFilter");
+    const priceRangeFilter = getElement("priceRangeFilter");
+    const shippingFreeFilter = getElement("shippingFreeFilter");
+    const sortOrder = getElement("sortOrder");
+    const sentinel = getElement("infinite-scroll-sentinel");
+    const mobileMenuBtn = getElement("mobileMenuBtn");
+    const mobileBackdrop = getElement("mobileQuickBackdrop");
+
+    if (!sourceButtons || !categoryFilter || !priceRangeFilter || !shippingFreeFilter || !sortOrder) return;
+
+    updateBottomNav("home");
+    loadDashboardStats();
+
+    sourceButtons.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-source]");
+        if (!button) return;
+        fetchDeals(button.dataset.source, 1, false);
+    });
+
+    const applyFilters = () => {
+        state.category = categoryFilter.value;
+        state.priceRange = priceRangeFilter.value;
+        state.shippingFree = shippingFreeFilter.checked;
+        state.sort = sortOrder.value;
+        fetchDeals(state.source, 1, false);
+    };
+
+    [categoryFilter, priceRangeFilter, shippingFreeFilter, sortOrder].forEach((element) => {
+        element.addEventListener("change", applyFilters);
+    });
+
+    document.querySelectorAll("[data-query-chip]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const input = getElement("searchInput");
+            if (!input) return;
+            input.value = button.dataset.queryChip || "";
+            performSearch();
+        });
+    });
+
+    document.querySelectorAll("[data-scroll-target]").forEach((button) => {
+        button.addEventListener("click", () => {
+            const target = getElement(button.dataset.scrollTarget);
+            toggleMobilePanel(false);
+            if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    });
+
+    if (mobileMenuBtn) {
+        mobileMenuBtn.addEventListener("click", () => toggleMobilePanel());
+    }
+
+    if (mobileBackdrop) {
+        mobileBackdrop.addEventListener("click", () => toggleMobilePanel(false));
+    }
+
+    document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (!target.closest(".profile-container")) closeProfileMenu();
+    });
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        toggleMobilePanel(false);
+        closeProfileMenu();
+        if (!getElement("commentModal")?.classList.contains("hidden")) closeCommentModal();
+        if (!getElement("telegramModal")?.classList.contains("hidden")) closeTelegramModal();
+    });
+
+    if (window.matchMedia("(max-width: 720px)").matches) {
+        const filterContent = getElement("filterContent");
+        if (filterContent) filterContent.classList.add("hidden");
+    }
+
+    if (sentinel) {
+        const observer = new IntersectionObserver((entries) => {
+            const entry = entries[0];
+            if (!entry.isIntersecting || state.loading || state.searchMode || state.page >= state.totalPages) return;
+            fetchDeals(state.source, state.page + 1, true);
+        }, { threshold: 0.25 });
+        observer.observe(sentinel);
+    }
+
+    fetchDeals("all", 1, false);
+});
