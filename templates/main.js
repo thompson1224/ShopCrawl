@@ -252,15 +252,15 @@ function updateSummary(deals = [], pagination = null, mode = "feed") {
 
     if (mode === "search") {
         if (feedTitle) feedTitle.textContent = `검색 결과 · ${state.currentQuery}`;
-        if (feedDescription) feedDescription.textContent = "일반 검색 결과입니다. 다시 소스 피드로 돌아가려면 소스를 선택하거나 필터를 조정하세요.";
+        if (feedDescription) feedDescription.textContent = "검색어 기준 결과입니다.";
         if (feedSourceLabel) feedSourceLabel.textContent = "검색";
-        if (statusLabel) statusLabel.textContent = `검색어 "${state.currentQuery}" 기준으로 관련 딜을 정리했습니다.`;
+        if (statusLabel) statusLabel.textContent = `"${state.currentQuery}" 결과를 보여줍니다.`;
         return;
     }
 
     if (feedTitle) feedTitle.textContent = "현재 핫딜 피드";
-    if (feedDescription) feedDescription.textContent = "선택한 소스와 필터를 기준으로 최신 딜을 정리합니다.";
-    if (statusLabel) statusLabel.textContent = `${getSourceLabel(state.source)} 기준 피드를 ${formatCount(resultCount)}건 기준으로 정리했습니다.`;
+    if (feedDescription) feedDescription.textContent = "선택한 조건 기준 최신 딜입니다.";
+    if (statusLabel) statusLabel.textContent = `${getSourceLabel(state.source)} 피드 ${formatCount(resultCount)}건`;
 }
 
 function renderEmptyState(message) {
