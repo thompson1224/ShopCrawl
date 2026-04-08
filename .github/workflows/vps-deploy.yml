@@ -67,7 +67,19 @@ jobs:
             
             sudo docker-compose -f docker-compose.production.yml down --remove-orphans || true
             sudo docker-compose -f docker-compose.production.yml up -d --build
-            sleep 10
-            curl --http1.1 -sS http://127.0.0.1:8000/health >/dev/null
+
+            # Give the app time to finish startup jobs before declaring deploy failure.
+            health_ok=false
+            for attempt in $(seq 1 18); do
+              if curl --http1.1 -fsS http://127.0.0.1:8000/health >/dev/null; then
+                health_ok=true
+                break
+              fi
+              sleep 5
+            done
+
+            if [ "$health_ok" != "true" ]; then
+              exit 1
+            fi
             sudo docker image prune -f
             trap - ERR
