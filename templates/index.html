@@ -215,12 +215,23 @@
         .icon-btn {
             width: 2.75rem;
             height: 2.75rem;
-            display: grid;
-            place-items: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             border-radius: 1rem;
             background: var(--surface-muted);
             border: 1px solid var(--line);
             color: var(--text);
+            padding: 0;
+            line-height: 0;
+        }
+
+        .icon-btn svg {
+            display: block;
+            width: 1.25rem;
+            height: 1.25rem;
+            flex-shrink: 0;
+            transform: translateY(-0.5px);
         }
 
         .ghost-btn,
@@ -796,14 +807,25 @@
         .comment-btn {
             width: 2rem;
             height: 2rem;
-            display: grid;
-            place-items: center;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             border-radius: 0.75rem;
             border: 1px solid var(--line);
             background: var(--surface-muted);
             color: var(--text);
             cursor: pointer;
             flex-shrink: 0;
+            padding: 0;
+            line-height: 0;
+        }
+
+        .comment-btn svg {
+            display: block;
+            width: 1rem;
+            height: 1rem;
+            flex-shrink: 0;
+            transform: translate(0.25px, -0.5px);
         }
 
         .comment-btn:hover {
@@ -1162,6 +1184,27 @@
 
             .mobile-only {
                 display: inline-flex;
+            }
+
+            .icon-btn {
+                width: 2.875rem;
+                height: 2.875rem;
+            }
+
+            .icon-btn svg {
+                transform: translateY(-1px);
+            }
+
+            #mobileMenuBtn svg {
+                transform: translateY(-0.5px);
+            }
+
+            #filterToggleIcon {
+                transform: translateY(-1px);
+            }
+
+            .comment-btn svg {
+                transform: translate(0.5px, -0.75px);
             }
 
             .hero-copy {

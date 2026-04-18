@@ -193,7 +193,7 @@ function createDealCard(deal) {
     commentBtn.setAttribute("aria-label", "댓글 열기");
     commentBtn.innerHTML = `
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8m-8 4h5m7 6l-3.4-3.4A8 8 0 1018 18.6L22 22"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8m-8 4h5m-9 5l-4 3v-3.5A8.5 8.5 0 013 10.5A8.5 8.5 0 0111.5 2h1A8.5 8.5 0 0121 10.5v0A8.5 8.5 0 0112.5 19H8z"></path>
         </svg>
     `;
     commentBtn.onclick = (event) => {
